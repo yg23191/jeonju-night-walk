@@ -10,10 +10,10 @@ interface Props {
   instance: MapInstance
   buildings: Building[]
   places: Place[]
-  lights: Point[]
+  lighting?: { lamps: Point[]; low: { point: Point }[]; unknown: { point: Point }[] }
 }
 
-export function LocationLayer({ instance, buildings, places, lights }: Props) {
+export function LocationLayer({ instance, buildings, places, lighting }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
@@ -59,20 +59,25 @@ export function LocationLayer({ instance, buildings, places, lights }: Props) {
           ctx.stroke()
         }
       }
+      function dot(point: Point, radius: number, color: string) {
+        if (point[0] < west || point[0] > east || point[1] < south || point[1] > north) return
+        const { x, y } = pixel(point)
+        const ctx = context!
+        ctx.fillStyle = color
+        ctx.beginPath()
+        ctx.arc(x, y, radius, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.stroke()
+      }
+      ctx.strokeStyle = '#fff'
+      ctx.lineWidth = 1
       if (map.getLevel() <= 6) {
-        ctx.strokeStyle = '#fff'
-        ctx.lineWidth = 1
-        function dot(point: Point, radius: number, color: string) {
-          if (point[0] < west || point[0] > east || point[1] < south || point[1] > north) return
-          const { x, y } = pixel(point)
-          ctx.fillStyle = color
-          ctx.beginPath()
-          ctx.arc(x, y, radius, 0, Math.PI * 2)
-          ctx.fill()
-          ctx.stroke()
-        }
         for (const [, , point] of places) dot(point, 3, '#086a80')
-        for (const point of lights) dot(point, 5, '#a45700')
+      }
+      if (lighting) {
+        for (const point of lighting.lamps) dot(point, 4, '#d6930d')
+        for (const { point } of lighting.unknown) dot(point, 3, '#7c8593')
+        for (const { point } of lighting.low) dot(point, 4, '#e8273c')
       }
     }
 
@@ -91,7 +96,7 @@ export function LocationLayer({ instance, buildings, places, lights }: Props) {
       maps.event.removeListener(map, 'bounds_changed', schedule)
       maps.event.removeListener(map, 'idle', schedule)
     }
-  }, [instance, buildings, places, lights])
+  }, [instance, buildings, places, lighting])
 
   return <canvas ref={canvasRef} className="location-layer" aria-hidden="true" />
 }

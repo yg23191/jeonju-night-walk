@@ -9,46 +9,42 @@ import type { Building, Place } from './locationData.ts'
 import { inWansan, wansanBoundary } from './wansan.ts'
 import { findWalkingPath } from './walkingNetwork.ts'
 import type { WalkingNetwork } from './walkingNetwork.ts'
+import { simulateRouteLighting } from './routeLighting.ts'
+import { settings } from './light.ts'
 
 type End = 'from' | 'to'
-type Selection = End | 'lamp'
 export type Locations = Partial<Record<End, Point>>
 const ends = ['from', 'to'] as const
 const names = { from: '출발지', to: '도착지' }
 const emptyBuildings: Building[] = []
 const emptyPlaces: Place[] = []
-const emptyLights: Point[] = []
 const example: Locations = { from: [127.14865,35.82315], to: [127.15015,35.81613] }
-const exampleLamps: Point[] = [[127.14856,35.82249],[127.14915,35.82049],[127.14979,35.81894]]
 const formatCount = (count: number) => count.toLocaleString('ko-KR')
 
 interface Props {
   locations: Locations
   onChange: (locations: Locations) => void
-  lamps: Point[]
-  onLampsChange: (lamps: Point[]) => void
 }
 
-export function RealLocations({ locations, onChange, lamps, onLampsChange }: Props) {
+export function RealLocations({ locations, onChange }: Props) {
   const container = useRef<HTMLDivElement>(null)
-  const [picking, setPicking] = useState<Selection>(locations.from && !locations.to ? 'to' : 'from')
+  const [picking, setPicking] = useState<End>(locations.from && !locations.to ? 'to' : 'from')
   const [notice, setNotice] = useState('')
   const [failed, setFailed] = useState(false)
   const [instance, setInstance] = useState<MapInstance>()
   const [buildings, setBuildings] = useState<Building[]>()
   const [places, setPlaces] = useState<Place[]>()
   const [network, setNetwork] = useState<WalkingNetwork>()
-  const [registeredLights, setRegisteredLights] = useState<Point[]>()
   const [dataErrors, setDataErrors] = useState<string[]>([])
   const [showBuildings, setShowBuildings] = useState(true)
   const [showPlaces, setShowPlaces] = useState(true)
-  const [showRegisteredLights, setShowRegisteredLights] = useState(false)
   const [query, setQuery] = useState('')
   const searchTerm = query.trim().toLocaleLowerCase('ko-KR').replace(/\s+/g, '')
   const matches = useMemo(() => searchTerm && places ?
     places.filter(([name]) => name.toLocaleLowerCase('ko-KR').replace(/\s+/g, '').includes(searchTerm)) : [], [places, searchTerm])
   const route = useMemo(() => network && locations.from && locations.to ?
     findWalkingPath(network, locations.from, locations.to) : undefined, [network, locations])
+  const lighting = useMemo(() => route ? simulateRouteLighting(route.line) : undefined, [route])
 
   useEffect(() => {
     let active = true
@@ -74,7 +70,6 @@ export function RealLocations({ locations, onChange, lamps, onLampsChange }: Pro
     load<Building[]>('wansan-buildings.json', '건물', setBuildings)
     load<Place[]>('wansan-places.json', '장소', setPlaces)
     load<WalkingNetwork>('wansan-walking.json', '보행 경로', setNetwork)
-    load<Point[]>('wansan-registered-lights.json', '공개 가로등', setRegisteredLights)
     return () => { active = false }
   }, [])
 
@@ -95,7 +90,7 @@ export function RealLocations({ locations, onChange, lamps, onLampsChange }: Pro
     const { maps, map } = instance
     const points = ends.flatMap(end => locations[end] ?
       [{ point: locations[end]!, label: names[end], role: end }] : [])
-    const pins = [...points, ...lamps.map((point, index) => ({point, label: `임의 가로등 ${index + 1}`, role: 'lamp'}))].map(({ point, label, role }) => {
+    const pins = points.map(({ point, label, role }) => {
       const [longitude, latitude] = point
       const element = document.createElement('span')
       element.className = 'kakao-pin real-pin'
@@ -106,7 +101,7 @@ export function RealLocations({ locations, onChange, lamps, onLampsChange }: Pro
       })
     })
     return () => pins.forEach(pin => pin.setMap(null))
-  }, [instance, locations, lamps])
+  }, [instance, locations])
 
   useEffect(() => {
     if (!instance || !route || route.line.length < 2) return
@@ -120,15 +115,6 @@ export function RealLocations({ locations, onChange, lamps, onLampsChange }: Pro
   function select(point: Point) {
     if (!inWansan(point)) {
       setNotice('완산구 경계 안의 위치를 선택해 주세요.')
-      return
-    }
-    if (picking === 'lamp') {
-      if (lamps.some(lamp => distance(lamp, point) < 1)) {
-        setNotice('이 지점에는 임의 가로등이 이미 표시되어 있습니다.')
-        return
-      }
-      onLampsChange([...lamps, point])
-      setNotice('')
       return
     }
     const other = picking === 'from' ? 'to' : 'from'
@@ -161,12 +147,11 @@ export function RealLocations({ locations, onChange, lamps, onLampsChange }: Pro
 
   function showExample() {
     onChange(example)
-    onLampsChange(exampleLamps)
     setPicking('from')
     setNotice('')
     if (!instance) return
     const bounds = new instance.maps.LatLngBounds()
-    for (const [longitude, latitude] of [...Object.values(example), ...exampleLamps]) {
+    for (const [longitude, latitude] of Object.values(example)) {
       bounds.extend(new instance.maps.LatLng(latitude, longitude))
     }
     instance.map.setBounds(bounds, 72)
@@ -177,9 +162,8 @@ export function RealLocations({ locations, onChange, lamps, onLampsChange }: Pro
       <section>
         <div className="section-title">
           <h2>출발지와 도착지</h2>
-          <button className="text-button" disabled={!locations.from && !locations.to && !lamps.length} onClick={() => {
+          <button className="text-button" disabled={!locations.from && !locations.to} onClick={() => {
             onChange({})
-            onLampsChange([])
             setPicking('from')
             setNotice('')
           }}>초기화</button>
@@ -214,31 +198,30 @@ export function RealLocations({ locations, onChange, lamps, onLampsChange }: Pro
           matches.length ? `검색 결과 ${formatCount(matches.length)}곳` : '일치하는 장소가 없습니다.'}</p>}
         {matches.length > 0 && <div className="routes location-results" aria-label="검색 결과">{matches.map(([name, , point], index) =>
           <button key={index} onClick={() => { select(point); focusPoint(point) }}>
-            <span>{name}</span><span>{picking === 'lamp' ? '가로등' : names[picking]}</span>
+            <span>{name}</span><span>{names[picking]}</span>
           </button>)}</div>}
         {dataErrors.length > 0 && <p className="notice" role="alert">{dataErrors.join(', ')} 자료를 불러오지 못했습니다.</p>}
       </section>
-      <section>
-        <div className="section-title"><h2>임의 가로등</h2><output>{lamps.length}개</output></div>
-        <button className={picking === 'lamp' ? 'pick active' : 'pick'} aria-pressed={picking === 'lamp'}
-          onClick={() => { setPicking(picking === 'lamp' ? 'from' : 'lamp'); setNotice('') }}>가로등 찍기</button>
-        <button className="text-button" disabled={!lamps.length} onClick={() => onLampsChange([])}>가로등 지우기</button>
-        <p className="muted">지도에 추가한 가로등은 시연용 위치입니다.</p>
-        <label className="layer-controls"><input type="checkbox" checked={showRegisteredLights} onChange={e => setShowRegisteredLights(e.target.checked)}/>
-          OSM 등록 가로등 {registeredLights && formatCount(registeredLights.length)}개</label>
-        <p className="muted">공개 지도에 등록된 일부 위치입니다. 조도는 계산하지 않습니다.</p>
-      </section>
+      {lighting && <section aria-label="가상 조도 결과">
+        <h2>가상 조도 결과</h2>
+        <p className="muted" role="status">임의 가로등 {formatCount(lighting.lamps.length)}개 · 예상 저조도 {formatCount(lighting.low.length)}지점</p>
+        <p className="muted">임의 가로등으로 계산한 시연 결과입니다. 빨간 점은 {settings.threshold} lx 미만을 뜻합니다.</p>
+      </section>}
     </aside>
     <div className="content">
       <section className="map" aria-label="실제 위치를 선택할 카카오 지도">
         <div className="kakao-map real-map" ref={container} />
         {instance && <LocationLayer instance={instance} buildings={showBuildings ? buildings ?? emptyBuildings : emptyBuildings}
-          places={showPlaces ? places ?? emptyPlaces : emptyPlaces} lights={showRegisteredLights ? registeredLights ?? emptyLights : emptyLights} />}
-        {instance && <p className="map-label" role="status">{picking === 'lamp' ? '임의 가로등을 놓을 지점을 누르세요.' : `${names[picking]}로 지정할 지점을 누르세요.`}</p>}
+          places={showPlaces ? places ?? emptyPlaces : emptyPlaces} lighting={lighting} />}
+        {instance && <p className="map-label" role="status">{names[picking]}로 지정할 지점을 누르세요.</p>}
         {!instance && (failed ? <p className="map-label" role="alert">카카오 지도를 불러오지 못했습니다.</p> :
           <p className="map-label" role="status">카카오 지도 불러오는 중</p>)}
       </section>
-      <p className="map-note">보라색 면은 건물, 청록색 점은 장소, 주황색 점은 OSM 등록 가로등입니다. 가까이 확대하면 표시됩니다. 건물·장소는 <a href="https://docs.overturemaps.org/attribution/">Overture Maps Foundation, © OpenStreetMap contributors</a> 공개 자료입니다.</p>
+      {lighting && <div className="legend" aria-label="가상 조도 지도 범례">
+        <span><i className="yellow"/>임의 가로등</span><span><i className="red"/>예상 저조도</span>
+        {lighting.unknown.length > 0 && <span><i className="gray"/>경계 주변 자료 부족</span>}
+      </div>}
+      <p className="map-note">보라색 면은 건물, 청록색 점은 장소입니다. 가까이 확대하면 표시됩니다. 건물·장소는 <a href="https://docs.overturemaps.org/attribution/">Overture Maps Foundation, © OpenStreetMap contributors</a> 공개 자료입니다.</p>
       <p className="map-note">보행망 © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>. 완산구 경계는 통계청 SGIS(공공누리 제1유형)를 가공한 <a href="https://github.com/vuski/admdongkor">vuski/admdongkor</a>의 2026년 10월 1일 자료(<a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>)에서 추출했습니다.</p>
     </div>
   </main>

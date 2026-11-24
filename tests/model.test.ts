@@ -7,6 +7,7 @@ import { analyze, classify, estimate, summarize } from '../src/light.ts'
 import { demoRoutes } from '../src/routes.ts'
 import { inWansan } from '../src/wansan.ts'
 import { findWalkingPath } from '../src/walkingNetwork.ts'
+import { simulateRouteLighting } from '../src/routeLighting.ts'
 
 test('actual point selection is limited to Wansan-gu', () => {
   assert.equal(inWansan([127.148, 35.824]), true)
@@ -19,6 +20,11 @@ test('the example can be routed through the Wansan-gu walking network', () => {
   const route = findWalkingPath(network,[127.14865,35.82315],[127.15015,35.81613])
   assert.ok(route && route.meters > 800 && route.line.length > 3)
   assert.ok(route.line.every(inWansan))
+  const lighting = simulateRouteLighting(route.line)
+  assert.ok(lighting && lighting.lamps.length > 0 && lighting.low.length > 0)
+  assert.ok(lighting.low.every(sample => sample.lux !== null && sample.lux < 5 && inWansan(sample.point)))
+  assert.ok(lighting.lamps.every(inWansan))
+  assert.equal(simulateRouteLighting([route.line[0], route.line[0]]), undefined)
   assert.equal(findWalkingPath(network,[126.978,37.566],[127.15015,35.81613]),undefined)
 })
 
