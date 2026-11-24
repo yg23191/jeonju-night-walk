@@ -37,7 +37,7 @@ export function RealLocations({ locations, onChange }: Props) {
   const [network, setNetwork] = useState<WalkingNetwork>()
   const [dataErrors, setDataErrors] = useState<string[]>([])
   const [showBuildings, setShowBuildings] = useState(true)
-  const [showPlaces, setShowPlaces] = useState(true)
+  const [showPlaces, setShowPlaces] = useState(false)
   const [query, setQuery] = useState('')
   const searchTerm = query.trim().toLocaleLowerCase('ko-KR').replace(/\s+/g, '')
   const matches = useMemo(() => searchTerm && places ?
@@ -191,7 +191,7 @@ export function RealLocations({ locations, onChange }: Props) {
         <h2>건물과 장소</h2>
         <div className="layer-controls">
           <label><input type="checkbox" checked={showBuildings} onChange={e => setShowBuildings(e.target.checked)}/>건물 {buildings && formatCount(buildings.length)}</label>
-          <label><input type="checkbox" checked={showPlaces} onChange={e => setShowPlaces(e.target.checked)}/>장소 {places && formatCount(places.length)}</label>
+          <label><input type="checkbox" checked={showPlaces} onChange={e => setShowPlaces(e.target.checked)}/>장소 점 표시</label>
         </div>
         <label className="place-search">완산구 장소 검색<input type="search" value={query} onChange={e => setQuery(e.target.value)} placeholder="장소 이름 입력" /></label>
         {searchTerm && <p className="muted" role="status">{dataErrors.includes('장소') ? '장소 자료를 불러오지 못했습니다.' : !places ? '장소 자료를 불러오는 중입니다.' :
@@ -221,7 +221,7 @@ export function RealLocations({ locations, onChange }: Props) {
         <span><i className="yellow"/>임의 가로등</span><span><i className="red"/>예상 저조도</span>
         {lighting.unknown.length > 0 && <span><i className="gray"/>경계 주변 자료 부족</span>}
       </div>}
-      <p className="map-note">보라색 면은 건물, 청록색 점은 장소입니다. 가까이 확대하면 표시됩니다. 건물·장소는 <a href="https://docs.overturemaps.org/attribution/">Overture Maps Foundation, © OpenStreetMap contributors</a> 공개 자료입니다.</p>
+      <p className="map-note">확대하면 건물 도형이 표시됩니다. 장소 점은 왼쪽에서 켤 수 있습니다. 건물·장소는 <a href="https://docs.overturemaps.org/attribution/">Overture Maps Foundation, © OpenStreetMap contributors</a> 공개 자료입니다.</p>
       <p className="map-note">보행망 © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>. 완산구 경계는 통계청 SGIS(공공누리 제1유형)를 가공한 <a href="https://github.com/vuski/admdongkor">vuski/admdongkor</a>의 2026년 10월 1일 자료(<a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>)에서 추출했습니다.</p>
     </div>
   </main>
