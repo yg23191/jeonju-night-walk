@@ -26,9 +26,21 @@ npm.cmd run build
 
 카카오 배경지도에서 시연 장소 핀을 출발지·도착지로 선택할 수 있습니다. 가상 분석 지도와 같은 선택 상태를 사용합니다. 조도와 경로는 가상 분석 지도에 표시합니다.
 
-키를 설정한 배포본은 **실제 위치 선택** 화면으로 시작합니다. 전주시 경계 안에서 지도를 클릭해 출발지와 도착지를 지정합니다. 선택한 좌표는 현재 화면에만 유지됩니다. 실제 위치 선택과 가상 조도 분석은 각각 독립된 입력을 사용합니다.
+키를 설정한 배포본은 **실제 위치 선택** 화면으로 시작합니다. 완산구 경계 안에서 지도를 클릭하거나 장소를 검색해 출발지와 도착지를 지정합니다. 가까운 보행망에 연결되면 완산구 내부 경로를 표시합니다. **예시 지점 표시**는 테스트용 출발지·도착지와 임의 가로등을 함께 표시하며 **가로등 찍기**로도 임의 위치를 추가할 수 있습니다. 선택한 좌표는 현재 화면에만 유지됩니다. 실제 위치 선택과 가상 조도 분석은 독립된 입력을 사용합니다.
 
-전주시 경계는 [vuski/admdongkor 2026-10-01](https://github.com/vuski/admdongkor/tree/master/ver20261001)의 전주시 행정동을 합쳐 WGS84 소수점 6자리 정밀도로 변환한 결과입니다. 원자료는 [통계청 SGIS](https://sgis.kostat.go.kr)의 공공누리 제1유형 행정동 경계이며, 가공 데이터는 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)으로 배포됩니다.
+### 완산구 위치 자료
+
+| 파일 | 출처와 범위 |
+| --- | --- |
+| `src/wansan-boundary.json` | [vuski/admdongkor 2026-10-01](https://github.com/vuski/admdongkor/tree/master/ver20261001)의 완산구 행정동 19개를 합치고 WGS84 소수점 6자리로 변환. [통계청 SGIS](https://sgis.kostat.go.kr) 공공누리 제1유형 원자료, 가공 자료 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). |
+| `public/data/wansan-buildings.json` | [Overture Maps 2026-11-18.0 Buildings](https://docs.overturemaps.org/guides/buildings/)에서 완산구와 겹치는 도형 22,604개를 경계로 잘라 소수점 6자리로 적재. © Overture Maps Foundation, OpenStreetMap contributors 및 [Buildings 원자료 기여자](https://docs.overturemaps.org/attribution/). [ODbL 1.0](https://opendatacommons.org/licenses/odbl/1-0/). |
+| `public/data/wansan-places.json` | [Overture Maps 2026-11-18.0 Places](https://docs.overturemaps.org/guides/places/)의 완산구 장소 3,940곳. 화면에 필요한 공개 이름, 분류, 좌표를 추출했습니다. [Overture 및 Places 자료 기여자와 라이선스](https://docs.overturemaps.org/attribution/). |
+| `public/data/wansan-walking.json` | [OpenStreetMap](https://www.openstreetmap.org/copyright) 2026-11-24 조회, 완산구 내부 보행 가능성이 있는 도로·보행로 50,500개 선분. © OpenStreetMap contributors, [ODbL 1.0](https://opendatacommons.org/licenses/odbl/1-0/). |
+| `public/data/wansan-registered-lights.json` | 같은 OSM 스냅샷에서 완산구에 등록된 `highway=street_lamp` 18개. © OpenStreetMap contributors, [ODbL 1.0](https://opendatacommons.org/licenses/odbl/1-0/). |
+
+건물·장소 자료는 공개 데이터의 수록 범위에 따릅니다. 보행 경로는 선택 지점에서 65 m 이내의 가까운 보행망 선분에 연결한 후 A*로 계산합니다. 완산구 경계를 벗어나는 선분과 명시적으로 보행이 금지된 도로 등을 제외합니다. 이동 거리에는 지점에서 보행망 연결점까지의 직선 이격거리를 포함하지 않습니다. OSM 가로등은 조사 범위와 점등·광도 자료가 확인되지 않아 실제 조도 계산에 사용하지 않습니다.
+
+장소 자료의 [CDLA Permissive 2.0](public/data/LICENSE-CDLA-Permissive-2.0.txt), [Apache 2.0](public/data/LICENSE-Apache-2.0.txt) 및 [Foursquare NOTICE](public/data/NOTICE-Foursquare.txt)는 배포 파일에 포함합니다.
 
 로컬에서 빌드 결과를 확인하려면 개발 서버를 종료한 뒤 `npm.cmd exec vite -- preview --host 127.0.0.1 --port 5173 --strictPort`를 실행합니다. 카카오 허용 주소로 `http://127.0.0.1:5173`과 `http://localhost:5173`을 등록했습니다.
 

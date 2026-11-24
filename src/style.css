@@ -46,7 +46,15 @@ input[type=range]{width:100%;accent-color:#59abf8;margin:14px 0 0}
 .kakao-pin[aria-pressed=true]{background:#b5dcff;color:#142e49;border-color:#285e97}
 .real-pin{display:inline-block;pointer-events:none}
 .real-pin[data-end=to]{background:#56306b;border-color:#ddaeff}
+.real-pin[data-end=lamp]{background:#503210;border-color:#ffd17c;color:#fff0c2;font-size:.8rem;min-height:0;padding:3px 8px}
 .real-map{cursor:crosshair}
+.location-layer{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:1}
+.layer-controls{display:flex;gap:12px;flex-wrap:wrap;margin:8px 0;font-size:.875rem}
+.layer-controls input{accent-color:#69b5ff}
+.place-search{display:grid;gap:4px;font-size:.875rem}
+.place-search input{min-width:0;background:#182a3c;color:inherit;border:1px solid #334b62;border-radius:8px;padding:7px 9px}
+.location-results{max-height:175px;overflow:auto}
+.map-note a{color:#8ac7ff}
 .real-endpoint{align-items:center}
 .real-endpoint span{font-size:.875rem;font-variant-numeric:tabular-nums}
 .notice:empty{display:none}

@@ -18,6 +18,11 @@ interface KakaoBounds {
 interface KakaoMapInstance {
   setBounds(bounds: KakaoBounds, padding: number): void
   getCenter(): KakaoPosition
+  setCenter(position: KakaoPosition): void
+  getLevel(): number
+  setLevel(level: number): void
+  getBounds(): { getSouthWest(): KakaoPosition; getNorthEast(): KakaoPosition }
+  getProjection(): { containerPointFromCoords(position: KakaoPosition): { x: number; y: number } }
 }
 
 interface KakaoOverlay {
@@ -44,9 +49,18 @@ interface KakaoMaps {
     fillColor: string
     fillOpacity: number
   }) => KakaoOverlay
+  Polyline: new (options: {
+    map: KakaoMapInstance
+    path: KakaoPosition[]
+    strokeWeight: number
+    strokeColor: string
+    strokeOpacity: number
+  }) => KakaoOverlay
   event: {
     addListener(map: KakaoMapInstance, type: 'click', listener: (event: KakaoClick) => void): void
+    addListener(map: KakaoMapInstance, type: 'bounds_changed' | 'idle', listener: () => void): void
     removeListener(map: KakaoMapInstance, type: 'click', listener: (event: KakaoClick) => void): void
+    removeListener(map: KakaoMapInstance, type: 'bounds_changed' | 'idle', listener: () => void): void
   }
 }
 

@@ -1,16 +1,25 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import { coverage, lamps, loadLamps, world } from '../src/data.ts'
 import { containsDisk, distance, sampleLine } from '../src/gis.ts'
 import { analyze, classify, estimate, summarize } from '../src/light.ts'
 import { demoRoutes } from '../src/routes.ts'
-import { inJeonju } from '../src/jeonju.ts'
+import { inWansan } from '../src/wansan.ts'
+import { findWalkingPath } from '../src/walkingNetwork.ts'
 
-test('actual point selection is limited to Jeonju', () => {
-  assert.equal(inJeonju([127.148, 35.824]), true)
-  assert.equal(inJeonju([127.161, 35.849]), true)
-  assert.equal(inJeonju([127.163, 35.904]), false)
-  assert.equal(inJeonju([126.978, 37.566]), false)
+test('actual point selection is limited to Wansan-gu', () => {
+  assert.equal(inWansan([127.148, 35.824]), true)
+  assert.equal(inWansan([127.161, 35.849]), false)
+  assert.equal(inWansan([126.978, 37.566]), false)
+})
+
+test('the example can be routed through the Wansan-gu walking network', () => {
+  const network = JSON.parse(readFileSync(new URL('../public/data/wansan-walking.json', import.meta.url), 'utf8'))
+  const route = findWalkingPath(network,[127.14865,35.82315],[127.15015,35.81613])
+  assert.ok(route && route.meters > 800 && route.line.length > 3)
+  assert.ok(route.line.every(inWansan))
+  assert.equal(findWalkingPath(network,[126.978,37.566],[127.15015,35.81613]),undefined)
 })
 
 test('5 m sampling follows a bend and includes both exact endpoints', () => {

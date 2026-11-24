@@ -6,6 +6,7 @@ import { RealLocations } from './RealLocations.tsx'
 import type { Locations } from './RealLocations.tsx'
 import { coverage, lamps, places } from './data.ts'
 import { distance } from './gis.ts'
+import type { Point } from './gis.ts'
 import { analyze, classify, settings, summarize } from './light.ts'
 import type { Estimate } from './light.ts'
 import { demoRoutes } from './routes.ts'
@@ -19,6 +20,7 @@ const empty: Estimate[] = []
 function App() {
   const [showReal, setShowReal] = useState(hasKakaoKey)
   const [locations, setLocations] = useState<Locations>({})
+  const [sampleLamps, setSampleLamps] = useState<Point[]>([])
   const [showKakao, setShowKakao] = useState(false)
   const [ends, setEnds] = useState({ from: '', to: '' })
   const [picking, setPicking] = useState<End>('from')
@@ -70,7 +72,7 @@ function App() {
       <button aria-pressed={showReal} onClick={() => setShowReal(true)}>실제 위치 선택</button>
       <button aria-pressed={!showReal} onClick={() => setShowReal(false)}>조도 분석 시연</button>
     </nav>}
-    {showReal ? <RealLocations locations={locations} onChange={setLocations} /> : <main>
+    {showReal ? <RealLocations locations={locations} onChange={setLocations} lamps={sampleLamps} onLampsChange={setSampleLamps} /> : <main>
       <aside className="panel" aria-label="경로 분석 설정">
         <section>
           <div className="section-title"><h2>출발지와 도착지</h2><button className="text-button" onClick={example}>예시 경로</button></div>
