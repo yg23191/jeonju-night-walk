@@ -26,6 +26,10 @@ npm.cmd run build
 
 카카오 배경지도에서 시연 장소 핀을 출발지·도착지로 선택할 수 있습니다. 가상 분석 지도와 같은 선택 상태를 사용합니다. 조도와 경로는 가상 분석 지도에 표시합니다.
 
+키를 설정한 배포본은 **실제 위치 선택** 화면으로 시작합니다. 전주시 경계 안에서 지도를 클릭해 출발지와 도착지를 지정합니다. 선택한 좌표는 현재 화면에만 유지됩니다. 실제 위치 선택과 가상 조도 분석은 각각 독립된 입력을 사용합니다.
+
+전주시 경계는 [vuski/admdongkor 2026-10-01](https://github.com/vuski/admdongkor/tree/master/ver20261001)의 전주시 행정동을 합쳐 WGS84 소수점 6자리 정밀도로 변환한 결과입니다. 원자료는 [통계청 SGIS](https://sgis.kostat.go.kr)의 공공누리 제1유형 행정동 경계이며, 가공 데이터는 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)으로 배포됩니다.
+
 로컬에서 빌드 결과를 확인하려면 개발 서버를 종료한 뒤 `npm.cmd exec vite -- preview --host 127.0.0.1 --port 5173 --strictPort`를 실행합니다. 카카오 허용 주소로 `http://127.0.0.1:5173`과 `http://localhost:5173`을 등록했습니다.
 
 ## 자료와 설정

@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { DemoMap } from './DemoMap.tsx'
 import { KakaoMap, hasKakaoKey } from './KakaoMap.tsx'
+import { RealLocations } from './RealLocations.tsx'
+import type { Locations } from './RealLocations.tsx'
 import { coverage, lamps, places } from './data.ts'
 import { distance } from './gis.ts'
 import { analyze, classify, settings, summarize } from './light.ts'
@@ -15,6 +17,8 @@ const lux = (n: number) => n.toFixed(2) + ' lx'
 const empty: Estimate[] = []
 
 function App() {
+  const [showReal, setShowReal] = useState(hasKakaoKey)
+  const [locations, setLocations] = useState<Locations>({})
   const [showKakao, setShowKakao] = useState(false)
   const [ends, setEnds] = useState({ from: '', to: '' })
   const [picking, setPicking] = useState<End>('from')
@@ -61,8 +65,12 @@ function App() {
   }
 
   return <>
-    <header className="top"><span className="mark" aria-hidden="true">☾</span><div><h1>전주 귀갓길 조도 지도</h1><p>가로등 기반 야간 예상 조도 · 실제 측정값과 다를 수 있음</p></div><span className="badge">시연용 가상 데이터</span></header>
-    <main>
+    <header className="top"><span className="mark" aria-hidden="true">☾</span><div><h1>전주 귀갓길 조도 지도</h1><p>가로등 기반 야간 예상 조도 · 실제 측정값과 다를 수 있음</p></div>{!showReal && <span className="badge">시연용 가상 데이터</span>}</header>
+    {hasKakaoKey && <nav className="map-choice mode-choice" aria-label="서비스 모드">
+      <button aria-pressed={showReal} onClick={() => setShowReal(true)}>실제 위치 선택</button>
+      <button aria-pressed={!showReal} onClick={() => setShowReal(false)}>조도 분석 시연</button>
+    </nav>}
+    {showReal ? <RealLocations locations={locations} onChange={setLocations} /> : <main>
       <aside className="panel" aria-label="경로 분석 설정">
         <section>
           <div className="section-title"><h2>출발지와 도착지</h2><button className="text-button" onClick={example}>예시 경로</button></div>
@@ -131,7 +139,7 @@ function App() {
         <details className="model"><summary>조도 모델과 자료 범위</summary><p>경로를 5 m 간격으로 분석합니다. 지면에서 반경 40 m 이내의 가로등 기여를 합산하며, 상태가 미확인인 등은 점등으로 가정합니다. 높이와 광도가 없으면 6 m와 300 cd를 씁니다. 건물·나무 차폐, 배광, 상가 조명, 날씨, 실시간 점등은 반영 범위에 포함되지 않습니다. 지도와 장소, 경로, 조명 및 조사 범위는 모두 시연을 위해 생성했습니다.</p></details>
         </>}
       </div>
-    </main>
+    </main>}
   </>
 }
 

@@ -4,6 +4,14 @@ import { coverage, lamps, loadLamps, world } from '../src/data.ts'
 import { containsDisk, distance, sampleLine } from '../src/gis.ts'
 import { analyze, classify, estimate, summarize } from '../src/light.ts'
 import { demoRoutes } from '../src/routes.ts'
+import { inJeonju } from '../src/jeonju.ts'
+
+test('actual point selection is limited to Jeonju', () => {
+  assert.equal(inJeonju([127.148, 35.824]), true)
+  assert.equal(inJeonju([127.161, 35.849]), true)
+  assert.equal(inJeonju([127.163, 35.904]), false)
+  assert.equal(inJeonju([126.978, 37.566]), false)
+})
 
 test('5 m sampling follows a bend and includes both exact endpoints', () => {
   const a = world(-120, 0), b = world(-108, 0), c = world(-108, 11)

@@ -2,12 +2,22 @@ import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { origin, places } from './data.ts'
 
+interface KakaoPosition {
+  getLng(): number
+  getLat(): number
+}
+
+interface KakaoClick {
+  latLng: KakaoPosition
+}
+
 interface KakaoBounds {
   extend(position: object): void
 }
 
 interface KakaoMapInstance {
   setBounds(bounds: KakaoBounds, padding: number): void
+  getCenter(): KakaoPosition
 }
 
 interface KakaoOverlay {
@@ -16,7 +26,7 @@ interface KakaoOverlay {
 
 interface KakaoMaps {
   load(callback: () => void): void
-  LatLng: new (latitude: number, longitude: number) => object
+  LatLng: new (latitude: number, longitude: number) => KakaoPosition
   LatLngBounds: new () => KakaoBounds
   Map: new (element: HTMLElement, options: { center: object; level: number }) => KakaoMapInstance
   CustomOverlay: new (options: {
@@ -25,13 +35,26 @@ interface KakaoMaps {
     content: HTMLElement
     clickable: boolean
   }) => KakaoOverlay
+  Polygon: new (options: {
+    map: KakaoMapInstance
+    path: KakaoPosition[][]
+    strokeWeight: number
+    strokeColor: string
+    strokeOpacity: number
+    fillColor: string
+    fillOpacity: number
+  }) => KakaoOverlay
+  event: {
+    addListener(map: KakaoMapInstance, type: 'click', listener: (event: KakaoClick) => void): void
+    removeListener(map: KakaoMapInstance, type: 'click', listener: (event: KakaoClick) => void): void
+  }
 }
 
 const key = import.meta.env.VITE_KAKAO_MAP_JS_KEY?.trim()
 export const hasKakaoKey = Boolean(key)
 let loading: Promise<KakaoMaps> | undefined
 
-function loadKakaoMap() {
+export function loadKakaoMap() {
   if (!loading) {
     loading = new Promise<KakaoMaps>((resolve, reject) => {
       const script = document.createElement('script')
