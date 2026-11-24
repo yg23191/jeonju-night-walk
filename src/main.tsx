@@ -45,6 +45,7 @@ function App() {
     setChoice('central')
     setDetail(undefined)
     setNotice('')
+    setShowKakao(false)
   }
 
   function download() {
@@ -80,7 +81,7 @@ function App() {
           {!ends.from || !ends.to ? <p className="muted">두 장소를 선택하면 등록된 경로를 확인할 수 있습니다.</p> :
             routes.length === 0 ? <p className="notice" role="status">선택한 두 장소 사이에 등록된 시연 보행 경로가 없습니다.</p> :
             <div className="routes" aria-label="경로 선택">{routes.map(r => <button key={r.id} aria-pressed={route === r}
-              onClick={() => {setChoice(r.id);setDetail(undefined)}}>
+              onClick={() => {setChoice(r.id);setDetail(undefined);setShowKakao(false)}}>
               <span>{r.name}</span><span>{meters(r.line.slice(1).reduce((total,p,i) => total + distance(r.line[i],p),0))}</span>
             </button>)}</div>}
           {routes.length > 1 && !route && <p className="muted">분석할 경로를 선택하세요.</p>}
@@ -104,7 +105,10 @@ function App() {
           <button aria-pressed={!showKakao} onClick={() => setShowKakao(false)}>가상 분석 지도</button>
           <button aria-pressed={showKakao} onClick={() => setShowKakao(true)}>카카오 배경지도</button>
         </div>}
-        {showKakao ? <><KakaoMap /><p className="map-note">전주 실제 배경지도입니다. 경로와 조도 분석은 가상 분석 지도에서 확인할 수 있습니다.</p></> : <>
+        {showKakao ? <>
+          <KakaoMap from={ends.from} to={ends.to} picking={picking} onPlace={id => selectEnd(picking,id)} />
+          <p className="map-note">핀은 시연용 가상 장소입니다. 경로와 조도 결과는 가상 분석 지도에서 확인할 수 있습니다.</p>
+        </> : <>
         <DemoMap from={ends.from} to={ends.to} line={route?.line ?? []} estimates={analysis?.samples ?? empty} threshold={threshold}
           selected={detail?.meters} onPlace={id => selectEnd(picking,id)} onSample={setDetail}
           onEmpty={outside => setNotice(outside ? '전주시 대상 시연 범위 밖입니다. 지도에 표시된 장소를 선택해 주세요.' : '지도에 표시된 시연 장소 핀을 선택해 주세요.')}/>
