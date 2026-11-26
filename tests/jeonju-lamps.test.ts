@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict'
+import { mkdtempSync, rmdirSync, unlinkSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { test } from 'node:test'
-import { fetchLampPositions, officialLampPositions, readLampPage } from '../server/jeonju-lamps.mjs'
+import { configuredLampSources, fetchLampPositions, officialLampPositions, readLampPage, readSecurityLightSnapshot } from '../server/jeonju-lamps.mjs'
 
 const first = [127.1468, 35.8244]
 const second = [127.147983, 35.824229]
@@ -89,4 +92,26 @@ test('a failed provider request is retried and only a successful result is share
   assert.deepEqual(await officialLampPositions(), [{ type: 'street', points: [first] }])
   assert.deepEqual(await officialLampPositions(), [{ type: 'street', points: [first] }])
   assert.equal(request.mock.callCount(), 2)
+})
+
+test('the dated local security-light file is usable without credentials and returns only unique Wansan points', async t => {
+  const dir = mkdtempSync(join(tmpdir(), 'wansan-lamps-'))
+  const file = join(dir, 'security.json')
+  const previous = new Map(['JEONJU_STREETLAMP_API_KEY', 'JEONJU_SECURITY_LIGHT_API_KEY', 'JEONJU_SECURITY_LIGHT_SNAPSHOT_FILE']
+    .map(name => [name, process.env[name]]))
+  t.after(() => {
+    for (const [name, value] of previous) {
+      if (value === undefined) delete process.env[name]
+      else process.env[name] = value
+    }
+    unlinkSync(file)
+    rmdirSync(dir)
+  })
+  writeFileSync(file, JSON.stringify({ asOf: '2025-02-10', points: [outside, first, first, [0, 0], second] }))
+  delete process.env.JEONJU_STREETLAMP_API_KEY
+  delete process.env.JEONJU_SECURITY_LIGHT_API_KEY
+  process.env.JEONJU_SECURITY_LIGHT_SNAPSHOT_FILE = file
+  assert.deepEqual(configuredLampSources(), ['security'])
+  assert.deepEqual(readSecurityLightSnapshot(file), { type: 'security', asOf: '2025-02-10', points: [first, second] })
+  assert.deepEqual(await officialLampPositions(), [{ type: 'security', asOf: '2025-02-10', points: [first, second] }])
 })

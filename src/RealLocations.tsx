@@ -370,7 +370,8 @@ export function RealLocations({ locations, onChange }: Props) {
         <p className="muted">{crime.status || (!reports.safemap && '공식 지도는 생활안전지도 키 연결이 필요합니다.')} <a href="https://www.safemap.go.kr/opna/data/dataViewRenew.do?objtId=205">공식 출처</a></p>
         {showOfficialLamps && <p className="muted" role="status">{lampError ? '전주시 조명 자료를 불러오지 못했습니다.' :
           !officialLamps ? '전주시 조명 자료를 불러오는 중입니다.' :
-            officialLamps.map(source => `${source.type === 'street' ? '가로등' : '보안등'} ${source.error ? '로드 실패' : formatCount(source.points?.length ?? 0) + '곳'}`).join(' · ')}</p>}
+            officialLamps.map(source => `${source.type === 'street' ? '가로등' : '보안등'} ${source.error ? '로드 실패' :
+              formatCount(source.points?.length ?? 0) + '곳'}${source.asOf ? ' · 공공데이터포털 ' + source.asOf + ' 기준' : ''}`).join(' · ')}</p>}
         <button className="pick report-start" disabled={reports.mode === 'loading' || reports.mode === 'unavailable' || reports.saving}
           aria-pressed={reports.placing} onClick={() => {
             if (reports.placing) reports.cancel()
@@ -484,8 +485,8 @@ export function RealLocations({ locations, onChange }: Props) {
         {showReports && <span><i className="report-symbol"/>어두워서 피하고 싶은 곳</span>}
         {showField && field.sites.length > 0 && <><span><i className="field-symbol"/>실측 저조도 확인</span>
           <span><i className="field-symbol above"/>실측 기준 이상</span><span><i className="field-symbol review"/>실측 검토 중</span></>}
-        {showPublicLamps && <span><i className="yellow"/>공개 등록 가로등 · OSM</span>}
-        {showOfficialLamps && <span><i className="yellow"/>전주시 가로등·보안등</span>}
+        {showPublicLamps && <span><i className="registered-lamp-symbol"/>공개 등록 가로등 · OSM</span>}
+        {showOfficialLamps && <span><i className="registered-lamp-symbol"/>전주시 가로등·보안등</span>}
         {crime.image && <span>범죄주의구간 · 생활안전지도</span>}
         {showLighting && lighting && <><span><i className="yellow"/>임의 가로등</span><span><i className="red"/>예상 저조도</span>
           {lighting.unknown.length > 0 && <span><i className="gray"/>경계 주변 자료 부족</span>}</>}
@@ -496,6 +497,8 @@ export function RealLocations({ locations, onChange }: Props) {
       </dl>}
       <p className="map-note">확대하면 건물 도형이 표시됩니다. 장소 점은 왼쪽에서 켤 수 있습니다. 건물·장소는 <a href="https://docs.overturemaps.org/attribution/">Overture Maps Foundation, © OpenStreetMap contributors</a> 공개 자료입니다.</p>
       <p className="map-note">보행망 © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>. 완산구 경계는 통계청 SGIS(공공누리 제1유형)를 가공한 <a href="https://github.com/vuski/admdongkor">vuski/admdongkor</a>의 2026년 10월 1일 자료(<a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>)에서 추출했습니다.</p>
+      {showOfficialLamps && officialLamps?.some(source => source.asOf) &&
+        <p className="map-note">보안등 위치 출처 · <a href="https://www.data.go.kr/data/15017320/standard.do">전주시 제공 전국보안등정보표준데이터</a></p>}
     </div>
   </main>
 }

@@ -1,4 +1,6 @@
 import { XMLParser } from 'fast-xml-parser'
+import { existsSync, readFileSync } from 'node:fs'
+import { validPoint } from '../src/gis.ts'
 import { inWansan } from '../src/wansan.ts'
 
 const parser = new XMLParser({ processEntities: false, parseTagValue: false })
@@ -8,9 +10,27 @@ const sources = [
 ]
 const ttl = 60 * 60 * 1000
 const snapshots = new Map()
+const snapshotFile = () => process.env.JEONJU_SECURITY_LIGHT_SNAPSHOT_FILE?.trim()
 
 export function configuredLampSources() {
-  return sources.filter(source => process.env[source.key]?.trim()).map(source => source.type)
+  return sources.filter(source => process.env[source.key]?.trim() ||
+    (source.type === 'security' && snapshotFile() && existsSync(snapshotFile()))).map(source => source.type)
+}
+
+export function readSecurityLightSnapshot(file) {
+  if (!file) return undefined
+  try {
+    const { asOf, points } = JSON.parse(readFileSync(file, 'utf8'))
+    if (typeof asOf !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(asOf) || !Array.isArray(points)) return undefined
+    const valid = new Map()
+    for (const point of points) {
+      if (validPoint(point) && inWansan(point)) valid.set(point.join(','), point)
+    }
+    if (!valid.size) return undefined
+    return { type: 'security', points: [...valid.values()], asOf }
+  } catch {
+    return undefined
+  }
 }
 
 function number(value) {
@@ -80,16 +100,20 @@ export async function fetchLampPositions(type, key, request = fetch) {
 export async function officialLampPositions() {
   const available = new Set(configuredLampSources())
   const results = await Promise.all(sources.filter(source => available.has(source.type)).map(async source => {
+    const key = process.env[source.key]?.trim()
+    const fallback = () => (source.type === 'security' && readSecurityLightSnapshot(snapshotFile())) ||
+      { type: source.type, error: true }
+    if (!key) return fallback()
     const cached = snapshots.get(source.type)
     if (cached && (cached.pending || cached.until > Date.now())) return cached.promise
     const entry = { pending: true, until: 0, promise: null }
-    entry.promise = fetchLampPositions(source.type, process.env[source.key]).then(points => {
+    entry.promise = fetchLampPositions(source.type, key).then(points => {
       entry.pending = false
       entry.until = Date.now() + ttl
       return { type: source.type, points }
     }).catch(() => {
       snapshots.delete(source.type)
-      return { type: source.type, error: true }
+      return fallback()
     })
     snapshots.set(source.type, entry)
     return entry.promise

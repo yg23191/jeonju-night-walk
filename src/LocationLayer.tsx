@@ -177,7 +177,13 @@ export function LocationLayer({ instance, buildings, places, lighting, selected,
       ctx.lineWidth = 1
       if (level <= 6) {
         for (const [, , point] of places) dot(point, 3, '#086a80')
-        for (const point of publicLamps ?? []) dot(point, 4, '#996900')
+        const lampSize = level <= 4 ? 5 : 3
+        ctx.fillStyle = '#996900'
+        for (const point of publicLamps ?? []) {
+          if (point[0] < west || point[0] > east || point[1] < south || point[1] > north) continue
+          const { x, y } = pixel(point)
+          ctx.fillRect(x - lampSize / 2, y - lampSize / 2, lampSize, lampSize)
+        }
       }
       if (lighting) {
         if (level <= LOW_POINT_LEVEL) {

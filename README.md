@@ -55,6 +55,8 @@ GitHub Pages에서는 Node 서버를 별도 HTTPS 호스트에 실행하고, 지
 
 발급받은 공식 API 키는 Git에서 제외되는 `.env.local`에 저장합니다. 카카오 JavaScript 키에만 `VITE_` 변수명을 사용합니다. [전주시 가로등](https://www.data.go.kr/data/15056885/openapi.do)은 `JEONJU_STREETLAMP_API_KEY`, [전주시 보안등](https://www.data.go.kr/data/15057163/openapi.do)은 `JEONJU_SECURITY_LIGHT_API_KEY`를 사용합니다. 키를 설정한 뒤 Node 서버를 재시작하면 완료된 자료를 카카오 지도에 겹칠 수 있습니다. 완산구 경계 밖 좌표는 서버에서 제외합니다.
 
+보안등 API를 사용할 수 없는 경우, 전주시가 [전국보안등정보표준데이터](https://www.data.go.kr/data/15017320/standard.do)에 공개한 CSV를 정리한 좌표 파일을 로컬 서버에서 사용할 수 있습니다. `JEONJU_SECURITY_LIGHT_SNAPSHOT_FILE`에 Git에서 제외되는 좌표 파일 경로를 지정합니다. 형식은 `{ "asOf": "2025-02-10", "points": [[경도, 위도], ...] }`입니다. 전주시 제공 CSV에서 관리기관이 완산구청인 2025-02-10 기록만 선택하고 완산구 경계 밖과 중복 좌표를 제외한 자료입니다. 화면에서 기준일을 확인할 수 있으며 시설 위치에 해당합니다.
+
 ### 완산구 위치 자료
 
 | 파일 | 출처와 범위 |

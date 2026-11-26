@@ -9,7 +9,7 @@ const idsKey = 'wansan-dark-report-ids-v1'
 
 export type CommunityMode = 'loading' | 'shared' | 'local' | 'unavailable'
 export type LampSource = 'street' | 'security'
-export type OfficialLamps = { type: LampSource; points?: Point[]; error?: boolean }
+export type OfficialLamps = { type: LampSource; points?: Point[]; asOf?: string; error?: boolean }
 
 function readStored<T>(key: string, fallback: T): T {
   try { return JSON.parse(localStorage.getItem(key) || 'null') ?? fallback } catch { return fallback }
