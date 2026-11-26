@@ -3,8 +3,8 @@ import { createReadStream, existsSync, mkdirSync, statSync } from 'node:fs'
 import { dirname, extname, resolve, sep } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { reportCell, reportCellKey } from '../src/reportLocations.ts'
-import { wansanBounds } from '../src/wansan.ts'
 import { configuredLampSources, officialLampPositions } from './jeonju-lamps.mjs'
+import { safemapTile } from './safemap.mjs'
 
 for (const file of ['.env.local', '.env']) {
   if (existsSync(file)) process.loadEnvFile(file)
@@ -64,34 +64,10 @@ function withinSubmitLimit(req) {
 }
 
 async function sendSafemap(url, res) {
-  if (!safeMapKey) return reply(res, 503, { code: 'safemap_key_missing' })
-  const rawBounds = url.searchParams.get('bbox')?.split(',')
-  const box = rawBounds?.map(Number)
-  const [west, south, east, north] = wansanBounds
-  const width = Number(url.searchParams.get('width'))
-  const height = Number(url.searchParams.get('height'))
-  if (!box || box.length !== 4 || rawBounds.some(part => !part.trim()) || !box.every(Number.isFinite) ||
-    box[0] < west || box[1] < south || box[2] > east || box[3] > north || box[0] >= box[2] || box[1] >= box[3] ||
-    ![width, height].every(value => Number.isInteger(value) && value >= 32 && value <= 1024)) {
-    return reply(res, 400, { code: 'invalid_bounds' })
-  }
-  const upstream = new URL('https://www.safemap.go.kr/openapi2/IF_0087_WMS')
-  upstream.search = new URLSearchParams({
-    serviceKey: safeMapKey, service: 'WMS', request: 'GetMap', version: '1.1.1',
-    layers: 'A2SM_CRMNLHSPOT_TOT', styles: 'A2SM_CrmnlHspot_Tot_Tot', srs: 'EPSG:4326',
-    bbox: box.join(','), width: String(width), height: String(height), format: 'image/png', transparent: 'TRUE'
-  }).toString()
-  try {
-    const source = await fetch(upstream, { redirect: 'error', signal: AbortSignal.timeout(8500) })
-    if (!source.ok || !/^image\/png\b/i.test(source.headers.get('content-type') || '')) {
-      return reply(res, 502, { code: 'safemap_unavailable' })
-    }
-    const data = Buffer.from(await source.arrayBuffer())
-    res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'private, max-age=180' })
-    res.end(data)
-  } catch {
-    reply(res, 502, { code: 'safemap_unavailable' })
-  }
+  const result = await safemapTile(url.searchParams, safeMapKey)
+  if (!result.data) return reply(res, result.status, { code: result.code })
+  res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'private, max-age=180' })
+  res.end(result.data)
 }
 
 const contentTypes = {
