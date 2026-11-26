@@ -43,6 +43,7 @@ interface Props {
 export function RealLocations({ locations, onChange }: Props) {
   const container = useRef<HTMLDivElement>(null)
   const fieldSection = useRef<HTMLDivElement>(null)
+  const fieldLocationRequest = useRef(0)
   const [picking, setPicking] = useState<End>(locations.from && !locations.to ? 'to' : 'from')
   const [editing, setEditing] = useState(!locations.from || !locations.to)
   const [pointDetail, setPointDetail] = useState<Estimate>()
@@ -68,6 +69,9 @@ export function RealLocations({ locations, onChange }: Props) {
   const [fieldPicking, setFieldPicking] = useState(false)
   const [fieldPending, setFieldPending] = useState<{ point: Point; site?: FieldSite }>()
   const [fieldSelected, setFieldSelected] = useState('')
+  const [fieldLocation, setFieldLocation] = useState<Point>()
+  const [fieldLocationNotice, setFieldLocationNotice] = useState('')
+  const [locatingField, setLocatingField] = useState(false)
   const [query, setQuery] = useState('')
   const reports = useDarkReports()
   const field = useFieldMeasurements()
@@ -200,6 +204,7 @@ export function RealLocations({ locations, onChange }: Props) {
         setNotice('완산구 경계 안에서 실측 지점을 선택해 주세요.')
         return
       }
+      clearFieldLocation()
       setFieldPending({ point })
       setNotice('')
       requestAnimationFrame(() => fieldSection.current?.scrollIntoView({ block: 'nearest' }))
@@ -280,9 +285,56 @@ export function RealLocations({ locations, onChange }: Props) {
   }
 
   function cancelField() {
+    clearFieldLocation()
     setFieldPicking(false)
     setFieldPending(undefined)
     setFieldSelected('')
+  }
+
+  function clearFieldLocation() {
+    fieldLocationRequest.current++
+    setLocatingField(false)
+    setFieldLocation(undefined)
+    setFieldLocationNotice('')
+  }
+
+  function startField() {
+    cancelField()
+    reports.cancel()
+    setPointDetail(undefined)
+    setReportDetail(undefined)
+    setNotice('')
+    setShowField(true)
+    setFieldPicking(true)
+    container.current?.scrollIntoView({ block: 'nearest' })
+  }
+
+  function locateField() {
+    startField()
+    if (!window.isSecureContext || !navigator.geolocation) {
+      setFieldLocationNotice('현재 위치 기능을 사용하려면 HTTPS 주소로 접속해 주세요.')
+      return
+    }
+    const request = fieldLocationRequest.current
+    const isCurrent = () => request === fieldLocationRequest.current && container.current !== null
+    setLocatingField(true)
+    navigator.geolocation.getCurrentPosition(({ coords }) => {
+      if (!isCurrent()) return
+      setLocatingField(false)
+      const point: Point = [coords.longitude, coords.latitude]
+      if (!inWansan(point)) {
+        setFieldLocationNotice('추정된 현재 위치가 완산구 밖입니다.')
+        return
+      }
+      setFieldLocation(point)
+      setFieldLocationNotice(`현재 위치 · 기기 추정 오차 약 ${meters(coords.accuracy)}.`)
+      focusPoint(point)
+      container.current?.scrollIntoView({ block: 'nearest' })
+    }, error => {
+      if (!isCurrent()) return
+      setLocatingField(false)
+      setFieldLocationNotice(error.code === error.PERMISSION_DENIED ? '위치 권한을 확인해 주세요.' : '현재 위치를 확인하지 못했습니다.')
+    }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 })
   }
 
   return <main>
@@ -316,16 +368,7 @@ export function RealLocations({ locations, onChange }: Props) {
       <div ref={fieldSection}>
         <FieldPanel field={field} active={fieldPicking} visible={showField} onVisible={setShowField}
           pending={fieldPending && { ...fieldPending, label: placeLabel(fieldPending.point, places ?? emptyPlaces, fieldPending.site?.siteName) }}
-          onStart={() => {
-            reports.cancel()
-            setPointDetail(undefined)
-            setReportDetail(undefined)
-            setFieldSelected('')
-            setNotice('')
-            setShowField(true)
-            setFieldPicking(true)
-            container.current?.scrollIntoView({ block: 'nearest' })
-          }} onCancel={cancelField}
+          onStart={startField} onCancel={cancelField} onLocate={instance ? locateField : undefined} locating={locatingField}
           onSaved={id => { cancelField(); setFieldSelected(id); setShowField(true) }}
           onSite={site => {
             reports.cancel()
@@ -431,9 +474,12 @@ export function RealLocations({ locations, onChange }: Props) {
           places={showPlaces ? places ?? emptyPlaces : emptyPlaces} lighting={showLighting ? lighting : undefined}
           selected={pointDetail} crime={crime.image} reports={showReports ? reports.reports : undefined} reportPreview={reports.pending}
           fieldSites={showField ? field.sites : undefined} fieldPreview={fieldPending?.point} selectedField={fieldSelected}
-          publicLamps={activeLamps} />}
+          fieldLocation={fieldLocation} publicLamps={activeLamps} />}
         {instance && <>
-          <p className="map-label" role="status">{fieldPicking ? '조도계로 측정한 보행로 지점을 누르세요.' :
+          <p className="map-label" role="status">{fieldPicking ? <>
+            {locatingField ? '현재 위치를 찾는 중입니다. ' : fieldLocationNotice && `${fieldLocationNotice} `}
+            조도계로 측정한 보행로 지점을 누르세요.
+          </> :
             reports.placing ? '어두워서 피하고 싶은 공공 보행 구간을 누르세요.' :
             editing || !route ? `${names[picking]}로 지정할 지점을 누르세요.` :
               !showLighting ? '보행 경로를 확인하세요.' : lighting?.low.length || lighting?.segments.length ?

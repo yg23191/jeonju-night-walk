@@ -92,12 +92,13 @@ interface Props {
   reportPreview?: Point
   fieldSites?: FieldSite[]
   fieldPreview?: Point
+  fieldLocation?: Point
   selectedField?: string
   publicLamps?: Point[]
 }
 
 export function LocationLayer({ instance, buildings, places, lighting, selected, crime, reports, reportPreview,
-  fieldSites, fieldPreview, selectedField, publicLamps }: Props) {
+  fieldSites, fieldPreview, fieldLocation, selectedField, publicLamps }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
@@ -256,6 +257,16 @@ export function LocationLayer({ instance, buildings, places, lighting, selected,
         fieldMarker(site.point, color, site.id === selectedField ? 8 : 6)
       }
       if (fieldPreview) fieldMarker(fieldPreview, '#0e6d9e', 8)
+      if (fieldLocation) {
+        const { x, y } = pixel(fieldLocation)
+        ctx.beginPath()
+        ctx.arc(x, y, 7, 0, 2 * Math.PI)
+        ctx.fillStyle = '#133653'
+        ctx.strokeStyle = '#fff'
+        ctx.lineWidth = 3
+        ctx.fill()
+        ctx.stroke()
+      }
     }
 
     function schedule() {
@@ -274,7 +285,7 @@ export function LocationLayer({ instance, buildings, places, lighting, selected,
       maps.event.removeListener(map, 'idle', schedule)
     }
   }, [instance, buildings, places, lighting, selected, crime, reports, reportPreview,
-    fieldSites, fieldPreview, selectedField, publicLamps])
+    fieldSites, fieldPreview, fieldLocation, selectedField, publicLamps])
 
   return <canvas ref={canvasRef} className="location-layer" aria-hidden="true" />
 }

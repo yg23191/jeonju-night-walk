@@ -32,12 +32,14 @@ interface Props {
   pending?: { point: Point; label: string; site?: FieldSite }
   onStart: () => void
   onCancel: () => void
+  onLocate?: () => void
+  locating: boolean
   onSaved: (id: string) => void
   onSite: (site: FieldSite) => void
   titleFor: (site: FieldSite) => string
 }
 
-export function FieldPanel({ field, active, visible, onVisible, pending, onStart, onCancel, onSaved, onSite, titleFor }: Props) {
+export function FieldPanel({ field, active, visible, onVisible, pending, onStart, onCancel, onLocate, locating, onSaved, onSite, titleFor }: Props) {
   const [message, setMessage] = useState('')
   const [confirmRemove, setConfirmRemove] = useState('')
   const previousDirection = pending?.site?.direction || sensorDirections[0]
@@ -88,7 +90,10 @@ export function FieldPanel({ field, active, visible, onVisible, pending, onStart
     <div className="layer-controls">
       <label><input type="checkbox" checked={visible} onChange={event => onVisible(event.target.checked)} />실측 지점 표시</label>
     </div>
-    <button className="pick" onClick={() => { setMessage(''); if (active) onCancel(); else onStart() }}>{active ? '실측 선택 취소' : '실측 지점 찍기'}</button>
+    <div className="layer-controls">
+      <button className="pick" onClick={() => { setMessage(''); if (active) onCancel(); else onStart() }}>{active ? '실측 선택 취소' : '실측 지점 찍기'}</button>
+      <button className="pick" disabled={!onLocate || locating || Boolean(pending)} onClick={() => { setMessage(''); onLocate?.() }}>현재 위치 주변에서 찍기</button>
+    </div>
     {pending && <form className="field-form" key={pending.site?.id ?? pending.point.join(',')} onSubmit={save}>
       <strong>{pending.label}</strong>
       <label>지점 ID<input required name="id" maxLength={64} readOnly={Boolean(pending.site)}
