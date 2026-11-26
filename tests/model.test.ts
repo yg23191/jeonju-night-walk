@@ -10,6 +10,33 @@ import { findWalkingPath } from '../src/walkingNetwork.ts'
 import { simulateRouteLighting } from '../src/routeLighting.ts'
 import { placeLabel } from '../src/locationData.ts'
 import { reportCell, reportCellKey } from '../src/reportLocations.ts'
+import { defaultFieldRules, fieldCsv, mergeFieldReadings, readFieldCsv, summarizeFieldReadings } from '../src/fieldMeasurements.ts'
+import { readLampPage } from '../server/jeonju-lamps.mjs'
+
+test('field readings use the median of the latest comparable repeats and round-trip through CSV', () => {
+  const csv = `id,longitude,latitude,lux,measured_at,height_m,direction,repeat_no
+WS-01,127.1468,35.8244,1.5,2026-11-26T20:00:00+09:00,1,수평·위쪽,1
+WS-01,127.1468,35.8244,4,2026-11-26T20:00:00+09:00,1,수평·위쪽,2
+WS-01,127.1468,35.8244,8,2026-11-26T20:00:00+09:00,1,수평·위쪽,3
+WS-01,127.1468,35.8244,80,2026-11-26T19:00:00+09:00,1,수평·위쪽,1`
+  const readings = readFieldCsv(csv)
+  assert.deepEqual(readFieldCsv(fieldCsv(readings)),readings)
+  assert.equal(mergeFieldReadings(readings,readings).length,4)
+  const [site] = summarizeFieldReadings(readings,defaultFieldRules)
+  assert.equal(site.median,4)
+  assert.equal(site.count,3)
+  assert.equal(site.status,'dark')
+  assert.equal(summarizeFieldReadings(readings,{threshold:4,minReadings:3})[0].status,'above')
+  assert.equal(summarizeFieldReadings(readings.slice(0,2),defaultFieldRules)[0].status,'review')
+  assert.throws(() => readFieldCsv(csv.replace('127.1468','126.978')),/완산구/)
+  assert.throws(() => readFieldCsv(csv.replace('2026-11-26','2099-11-26')),/측정 시각/)
+})
+
+test('official lamp adapter extracts coordinates from successful responses only', () => {
+  const sample = '<rfcOpenApi><header><resultCode>00</resultCode><pageSize>500</pageSize></header><body><item><posx>127.1468</posx><posy>35.8244</posy></item></body></rfcOpenApi>'
+  assert.deepEqual(readLampPage(sample),{points:[[127.1468,35.8244]],pageSize:500})
+  assert.throws(() => readLampPage(sample.replace('>00<','>10<')))
+})
 
 test('public report cells are coarse, consistent and limited to Wansan', () => {
   const a = reportCell([127.14682,35.82430])

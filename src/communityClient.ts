@@ -8,6 +8,8 @@ const localKey = 'wansan-dark-reports-v1'
 const idsKey = 'wansan-dark-report-ids-v1'
 
 export type CommunityMode = 'loading' | 'shared' | 'local' | 'unavailable'
+export type LampSource = 'street' | 'security'
+export type OfficialLamps = { type: LampSource; points?: Point[]; error?: boolean }
 
 function readStored<T>(key: string, fallback: T): T {
   try { return JSON.parse(localStorage.getItem(key) || 'null') ?? fallback } catch { return fallback }
@@ -24,11 +26,19 @@ export async function connectCommunity(signal: AbortSignal) {
     const settings = await response.json()
     if (typeof settings.safemap !== 'boolean') throw new Error('Community settings unavailable')
     const reports = await fetchSharedReports(signal)
-    return { mode: 'shared' as const, reports, safemap: settings.safemap }
+    const lamps: LampSource[] = Array.isArray(settings.lamps)
+      ? settings.lamps.filter((value: unknown) => value === 'street' || value === 'security') : []
+    return { mode: 'shared' as const, reports, safemap: settings.safemap, lamps }
   } catch (error) {
     if (signal.aborted || configuredApi) throw error
-    return { mode: 'local' as const, reports: localReports(), safemap: false }
+    return { mode: 'local' as const, reports: localReports(), safemap: false, lamps: [] }
   }
+}
+
+export async function fetchOfficialLamps(signal: AbortSignal): Promise<OfficialLamps[]> {
+  const result = await fetch(api('jeonju-lamps'), { signal })
+  if (!result.ok) throw new Error('Official public lights unavailable')
+  return result.json()
 }
 
 export async function fetchSharedReports(signal: AbortSignal): Promise<ReportCell[]> {

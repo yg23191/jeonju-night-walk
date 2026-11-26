@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { connectCommunity, fetchSharedReports, saveDarkReport } from './communityClient.ts'
-import type { CommunityMode } from './communityClient.ts'
+import type { CommunityMode, LampSource } from './communityClient.ts'
 import type { Point } from './gis.ts'
 import { reportCell, reportCellKey } from './reportLocations.ts'
 import type { ReportCell } from './reportLocations.ts'
@@ -8,6 +8,7 @@ import type { ReportCell } from './reportLocations.ts'
 export function useDarkReports() {
   const [mode, setMode] = useState<CommunityMode>('loading')
   const [safemap, setSafemap] = useState(false)
+  const [lampSources, setLampSources] = useState<LampSource[]>([])
   const [reports, setReports] = useState<ReportCell[]>([])
   const [placing, setPlacing] = useState(false)
   const [pending, setPending] = useState<Point>()
@@ -21,6 +22,7 @@ export function useDarkReports() {
       setMode(state.mode)
       setReports(state.reports)
       setSafemap(state.safemap)
+      setLampSources(state.lamps)
     }).catch(() => {
       if (!controller.signal.aborted) setMode('unavailable')
     })
@@ -84,5 +86,5 @@ export function useDarkReports() {
     }
   }
 
-  return { mode, safemap, reports, placing, pending, saving, notice, start, choose, cancel, submit }
+  return { mode, safemap, lampSources, reports, placing, pending, saving, notice, start, choose, cancel, submit }
 }

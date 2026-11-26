@@ -2,7 +2,7 @@ import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 import { loadKakaoMap } from './KakaoMap.tsx'
 import { distance } from './gis.ts'
 import type { Point } from './gis.ts'
-import { LocationLayer, LOW_POINT_LEVEL, pickDarkReport, pickLowLight } from './LocationLayer.tsx'
+import { LocationLayer, LOW_POINT_LEVEL, pickDarkReport, pickFieldSite, pickLowLight } from './LocationLayer.tsx'
 import type { MapInstance } from './LocationLayer.tsx'
 import { placeLabel, readLocationData } from './locationData.ts'
 import type { Building, Place } from './locationData.ts'
@@ -15,6 +15,10 @@ import type { Estimate } from './light.ts'
 import { useDarkReports } from './useDarkReports.ts'
 import { useCrimeMap } from './useCrimeMap.ts'
 import type { ReportCell } from './reportLocations.ts'
+import { FieldPanel, fieldLabels } from './FieldPanel.tsx'
+import { useFieldMeasurements } from './useFieldMeasurements.ts'
+import { fetchOfficialLamps } from './communityClient.ts'
+import type { OfficialLamps } from './communityClient.ts'
 
 type End = 'from' | 'to'
 type SelectedLocation = { point: Point; name?: string }
@@ -37,6 +41,7 @@ interface Props {
 
 export function RealLocations({ locations, onChange }: Props) {
   const container = useRef<HTMLDivElement>(null)
+  const fieldSection = useRef<HTMLDivElement>(null)
   const [picking, setPicking] = useState<End>(locations.from && !locations.to ? 'to' : 'from')
   const [editing, setEditing] = useState(!locations.from || !locations.to)
   const [pointDetail, setPointDetail] = useState<Estimate>()
@@ -53,8 +58,23 @@ export function RealLocations({ locations, onChange }: Props) {
   const [showCrime, setShowCrime] = useState(false)
   const [showReports, setShowReports] = useState(true)
   const [showLighting, setShowLighting] = useState(true)
+  const [showPublicLamps, setShowPublicLamps] = useState(false)
+  const [publicLamps, setPublicLamps] = useState<Point[]>()
+  const [showOfficialLamps, setShowOfficialLamps] = useState(false)
+  const [officialLamps, setOfficialLamps] = useState<OfficialLamps[]>()
+  const [lampError, setLampError] = useState(false)
+  const [showField, setShowField] = useState(true)
+  const [fieldPicking, setFieldPicking] = useState(false)
+  const [fieldPending, setFieldPending] = useState<Point>()
+  const [fieldSelected, setFieldSelected] = useState('')
   const [query, setQuery] = useState('')
   const reports = useDarkReports()
+  const field = useFieldMeasurements()
+  const fieldDetail = showField ? field.sites.find(site => site.id === fieldSelected) : undefined
+  const activeLamps = useMemo(() => [
+    ...(showPublicLamps ? publicLamps ?? [] : []),
+    ...(showOfficialLamps ? (officialLamps ?? []).flatMap(source => source.points ?? []) : [])
+  ], [showPublicLamps, publicLamps, showOfficialLamps, officialLamps])
   const crime = useCrimeMap(instance, showCrime, reports.safemap)
   const searchTerm = query.trim().toLocaleLowerCase('ko-KR').replace(/\s+/g, '')
   const matches = useMemo(() => searchTerm && places ?
@@ -74,6 +94,31 @@ export function RealLocations({ locations, onChange }: Props) {
     })
     return () => { active = false }
   }, [])
+
+  useEffect(() => {
+    if (!showPublicLamps || publicLamps) return
+    let active = true
+    readLocationData<Point[]>('wansan-registered-lights.json').then(data => {
+      if (active) setPublicLamps(data)
+    }).catch(() => {
+      if (active) setNotice('공개 등록 가로등 자료를 불러오지 못했습니다.')
+    })
+    return () => { active = false }
+  }, [showPublicLamps, publicLamps])
+
+  useEffect(() => {
+    if (!showOfficialLamps || officialLamps) return
+    const controller = new AbortController()
+    fetchOfficialLamps(controller.signal).then(data => {
+      if (!controller.signal.aborted) {
+        setOfficialLamps(data)
+        setLampError(false)
+      }
+    }).catch(() => {
+      if (!controller.signal.aborted) setLampError(true)
+    })
+    return () => controller.abort()
+  }, [showOfficialLamps, officialLamps])
 
   useEffect(() => {
     let active = true
@@ -144,19 +189,40 @@ export function RealLocations({ locations, onChange }: Props) {
     setNotice('')
     setPointDetail(undefined)
     setReportDetail(undefined)
+    setFieldSelected('')
     setEditing(!otherPoint)
     if (!otherPoint) setPicking(other)
   }
   const mapSelect = useEffectEvent((point: Point) => {
+    if (fieldPicking) {
+      if (!inWansan(point)) {
+        setNotice('완산구 경계 안에서 실측 지점을 선택해 주세요.')
+        return
+      }
+      setFieldPending(point)
+      setNotice('')
+      requestAnimationFrame(() => fieldSection.current?.scrollIntoView({ block: 'nearest' }))
+      return
+    }
     if (reports.placing) {
       reports.choose(point)
       return
+    }
+    if (instance && showField) {
+      const hit = pickFieldSite(instance, field.sites, point)
+      if (hit) {
+        setFieldSelected(hit.id)
+        setPointDetail(undefined)
+        setReportDetail(undefined)
+        return
+      }
     }
     if (instance && showReports) {
       const report = pickDarkReport(instance, reports.reports, point)
       if (report) {
         setReportDetail(report)
         setPointDetail(undefined)
+        setFieldSelected('')
         return
       }
     }
@@ -168,6 +234,7 @@ export function RealLocations({ locations, onChange }: Props) {
       const detail = pickLowLight(instance, lighting, point)
       if (detail) {
         setReportDetail(undefined)
+        setFieldSelected('')
         setPointDetail(detail)
       }
     }
@@ -196,6 +263,7 @@ export function RealLocations({ locations, onChange }: Props) {
 
   function showExample() {
     reports.cancel()
+    cancelField()
     onChange(example)
     setPicking('from')
     setNotice('')
@@ -210,6 +278,12 @@ export function RealLocations({ locations, onChange }: Props) {
     instance.map.setBounds(bounds, 72)
   }
 
+  function cancelField() {
+    setFieldPicking(false)
+    setFieldPending(undefined)
+    setFieldSelected('')
+  }
+
   return <main>
     <aside className="panel" aria-label="실제 위치 설정">
       <section>
@@ -217,6 +291,7 @@ export function RealLocations({ locations, onChange }: Props) {
           <h2>출발지와 도착지</h2>
           <button className="text-button" disabled={!locations.from && !locations.to} onClick={() => {
             reports.cancel()
+            cancelField()
             onChange({})
             setPicking('from')
             setNotice('')
@@ -230,13 +305,38 @@ export function RealLocations({ locations, onChange }: Props) {
           const location = locations[end]
           return <div className="endpoint real-endpoint" key={end}>
             <button className={editing && picking === end ? 'pick active' : 'pick'} aria-pressed={editing && picking === end}
-              onClick={() => { reports.cancel(); setPicking(end); setEditing(true); setPointDetail(undefined); setReportDetail(undefined); setNotice('') }}>{names[end]}</button>
+              onClick={() => { reports.cancel(); cancelField(); setPicking(end); setEditing(true); setPointDetail(undefined); setReportDetail(undefined); setNotice('') }}>{names[end]}</button>
             <span aria-label={names[end] + ' 장소'}>{location ? placeLabel(location.point, places ?? emptyPlaces, location.name) : '미선택'}</span>
           </div>
         })}
         <button className="text-button" onClick={showExample}>예시 지점 표시</button>
         <p className="notice" role="status">{notice}</p>
       </section>
+      <div ref={fieldSection}>
+        <FieldPanel field={field} active={fieldPicking} visible={showField} onVisible={setShowField}
+          pending={fieldPending && { point: fieldPending, label: placeLabel(fieldPending, places ?? emptyPlaces) }}
+          onStart={() => {
+            reports.cancel()
+            setPointDetail(undefined)
+            setReportDetail(undefined)
+            setFieldSelected('')
+            setNotice('')
+            setShowField(true)
+            setFieldPicking(true)
+            container.current?.scrollIntoView({ block: 'nearest' })
+          }} onCancel={cancelField}
+          onSaved={id => { cancelField(); setFieldSelected(id); setShowField(true) }}
+          onSite={site => {
+            reports.cancel()
+            cancelField()
+            setPointDetail(undefined)
+            setReportDetail(undefined)
+            setShowField(true)
+            setFieldSelected(site.id)
+            focusPoint(site.point)
+            container.current?.scrollIntoView({ block: 'nearest' })
+          }} titleFor={site => placeLabel(site.point, places ?? emptyPlaces)} />
+      </div>
       <section aria-label="시민 제보와 범죄주의구간">
         <h2>시민 제보와 범죄주의구간</h2>
         <div className="layer-controls community-controls">
@@ -251,6 +351,9 @@ export function RealLocations({ locations, onChange }: Props) {
               setPointDetail(undefined)
             }
           }} />공식 범죄주의구간</label>
+          <label><input type="checkbox" checked={showPublicLamps} onChange={e => setShowPublicLamps(e.target.checked)} />공개 등록 가로등 · OSM</label>
+          <label><input type="checkbox" checked={showOfficialLamps} disabled={!reports.lampSources.length}
+            onChange={e => { setShowOfficialLamps(e.target.checked); setLampError(false) }} />전주시 가로등·보안등</label>
           {lighting && <label><input type="checkbox" checked={showLighting} onChange={e => {
             setShowLighting(e.target.checked)
             if (!e.target.checked) setPointDetail(undefined)
@@ -260,10 +363,14 @@ export function RealLocations({ locations, onChange }: Props) {
           reports.mode === 'local' ? '이 브라우저에만 저장됩니다. 공용 제보 서버 연결 전입니다.' :
           reports.mode === 'loading' ? '제보 현황을 불러오는 중입니다.' : '공용 제보 서버에 연결하지 못했습니다.'}</p>
         <p className="muted">{crime.status || (!reports.safemap && '공식 지도는 생활안전지도 키 연결이 필요합니다.')} <a href="https://www.safemap.go.kr/opna/data/dataViewRenew.do?objtId=205">공식 출처</a></p>
+        {showOfficialLamps && <p className="muted" role="status">{lampError ? '전주시 조명 자료를 불러오지 못했습니다.' :
+          !officialLamps ? '전주시 조명 자료를 불러오는 중입니다.' :
+            officialLamps.map(source => `${source.type === 'street' ? '가로등' : '보안등'} ${source.error ? '로드 실패' : formatCount(source.points?.length ?? 0) + '곳'}`).join(' · ')}</p>}
         <button className="pick report-start" disabled={reports.mode === 'loading' || reports.mode === 'unavailable' || reports.saving}
           aria-pressed={reports.placing} onClick={() => {
             if (reports.placing) reports.cancel()
             else {
+              cancelField()
               setShowReports(true)
               setPointDetail(undefined)
               setReportDetail(undefined)
@@ -290,7 +397,7 @@ export function RealLocations({ locations, onChange }: Props) {
         {searchTerm && <p className="muted" role="status">{dataErrors.includes('장소') ? '장소 자료를 불러오지 못했습니다.' : !places ? '장소 자료를 불러오는 중입니다.' :
           matches.length ? `검색 결과 ${formatCount(matches.length)}곳` : '일치하는 장소가 없습니다.'}</p>}
         {matches.length > 0 && <div className="routes location-results" aria-label="검색 결과">{matches.map(([name, , point], index) =>
-          <button key={index} onClick={() => { reports.cancel(); select(point, name); focusPoint(point) }}>
+          <button key={index} onClick={() => { reports.cancel(); cancelField(); select(point, name); focusPoint(point) }}>
             <span>{name}</span><span>{names[picking]}</span>
           </button>)}</div>}
         {dataErrors.length > 0 && <p className="notice" role="alert">{dataErrors.join(', ')} 자료를 불러오지 못했습니다.</p>}
@@ -302,6 +409,7 @@ export function RealLocations({ locations, onChange }: Props) {
         {lighting.segments.length > 0 && <button className="text-button" onClick={() => {
           const sample = lighting.segments[0].candidate
           reports.cancel()
+          cancelField()
           setShowLighting(true)
           setReportDetail(undefined)
           setPointDetail(sample)
@@ -315,9 +423,12 @@ export function RealLocations({ locations, onChange }: Props) {
         <div className="kakao-map real-map" ref={container} />
         {instance && <LocationLayer instance={instance} buildings={showBuildings ? buildings ?? emptyBuildings : emptyBuildings}
           places={showPlaces ? places ?? emptyPlaces : emptyPlaces} lighting={showLighting ? lighting : undefined}
-          selected={pointDetail} crime={crime.image} reports={showReports ? reports.reports : undefined} reportPreview={reports.pending} />}
+          selected={pointDetail} crime={crime.image} reports={showReports ? reports.reports : undefined} reportPreview={reports.pending}
+          fieldSites={showField ? field.sites : undefined} fieldPreview={fieldPending} selectedField={fieldSelected}
+          publicLamps={activeLamps} />}
         {instance && <>
-          <p className="map-label" role="status">{reports.placing ? '어두워서 피하고 싶은 공공 보행 구간을 누르세요.' :
+          <p className="map-label" role="status">{fieldPicking ? '조도계로 측정한 보행로 지점을 누르세요.' :
+            reports.placing ? '어두워서 피하고 싶은 공공 보행 구간을 누르세요.' :
             editing || !route ? `${names[picking]}로 지정할 지점을 누르세요.` :
               !showLighting ? '보행 경로를 확인하세요.' : lighting?.low.length || lighting?.segments.length ?
                 '빨간 점이나 구간을 누르면 상세를 볼 수 있습니다.' : '현재 경로에서 표시할 저조도 지점이 없습니다.'}</p>
@@ -340,6 +451,13 @@ export function RealLocations({ locations, onChange }: Props) {
           <div className="section-title"><h2>{placeLabel(reportDetail.point, places ?? emptyPlaces)}</h2><button className="text-button" onClick={() => setReportDetail(undefined)}>닫기</button></div>
           <p>어두워서 피하고 싶은 곳 · 제보 {formatCount(reportDetail.count)}건</p>
         </section>}
+        {fieldDetail && <section className="detail map-point-detail" aria-label="현장 실측 상세" aria-live="polite">
+          <div className="section-title"><h2>{placeLabel(fieldDetail.point, places ?? emptyPlaces)}</h2>
+            <button className="text-button" onClick={() => setFieldSelected('')}>닫기</button></div>
+          <p><strong>{fieldLabels[fieldDetail.status]}</strong> · 중앙값 {fieldDetail.median.toFixed(2)} lx · {fieldDetail.count}회</p>
+          <p>측정 시각 {new Date(fieldDetail.measuredAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}</p>
+          <p className="muted">센서 높이 {fieldDetail.heightM === null ? '미기록' : `${fieldDetail.heightM} m`} · {fieldDetail.direction || '방향 미기록'}</p>
+        </section>}
         {pointDetail && <section className="detail map-point-detail" aria-label="저조도 지점 상세" aria-live="polite">
           <div className="section-title"><h2>저조도 지점 상세</h2><button className="text-button" onClick={() => setPointDetail(undefined)}>닫기</button></div>
           <dl className="point-details">
@@ -352,6 +470,10 @@ export function RealLocations({ locations, onChange }: Props) {
       </section>
       <div className="legend" aria-label="지도 범례">
         {showReports && <span><i className="report-symbol"/>어두워서 피하고 싶은 곳</span>}
+        {showField && field.sites.length > 0 && <><span><i className="field-symbol"/>실측 저조도 확인</span>
+          <span><i className="field-symbol above"/>실측 기준 이상</span><span><i className="field-symbol review"/>실측 검토 중</span></>}
+        {showPublicLamps && <span><i className="yellow"/>공개 등록 가로등 · OSM</span>}
+        {showOfficialLamps && <span><i className="yellow"/>전주시 가로등·보안등</span>}
         {crime.image && <span>범죄주의구간 · 생활안전지도</span>}
         {showLighting && lighting && <><span><i className="yellow"/>임의 가로등</span><span><i className="red"/>예상 저조도</span>
           {lighting.unknown.length > 0 && <span><i className="gray"/>경계 주변 자료 부족</span>}</>}

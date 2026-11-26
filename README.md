@@ -49,6 +49,12 @@ GitHub Pages에서는 Node 서버를 별도 HTTPS 호스트에 실행하고, 지
 
 공식 범죄주의구간은 [생활안전지도 범죄주의구간 WMS](https://www.safemap.go.kr/opna/data/dataViewRenew.do?objtId=205)의 키를 서버 환경변수 `SAFEMAP_SERVICE_KEY`에 설정해야 표시됩니다. 공공누리 제4유형으로 안내된 경찰청 밀도분석 지도이며, WMS 원본 색상과 범례 의미를 유지합니다. 공식 레이어를 켜면 기본으로 가상 조도 색상은 숨기고, 두 레이어는 각각 켜거나 끌 수 있습니다.
 
+### 현장 실측과 전주시 조명 레이어
+
+[현장 조사 결정표와 양식](FIELDWORK.md)을 참고하세요. 현장 실측 메뉴에서 지도를 눌러 한 번에 최대 세 측정값을 입력하거나 CSV를 가져옵니다. 실측값과 판정 설정은 브라우저에 보관되며 CSV로 백업할 수 있습니다. 5 lx 미만, 최소 3회가 프로젝트의 초기 판정 기준입니다. 공식 안전 기준이나 범죄 현황과 독립된 값입니다.
+
+발급받은 공식 API 키는 Git에서 제외되는 `.env.local`에 저장합니다. 카카오 JavaScript 키에만 `VITE_` 변수명을 사용합니다. [전주시 가로등](https://www.data.go.kr/data/15056885/openapi.do)은 `JEONJU_STREETLAMP_API_KEY`, [전주시 보안등](https://www.data.go.kr/data/15057163/openapi.do)은 `JEONJU_SECURITY_LIGHT_API_KEY`를 사용합니다. 키를 설정한 뒤 Node 서버를 재시작하면 완료된 자료를 카카오 지도에 겹칠 수 있습니다. 완산구 경계 밖 좌표는 서버에서 제외합니다.
+
 ### 완산구 위치 자료
 
 | 파일 | 출처와 범위 |

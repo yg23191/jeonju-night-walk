@@ -6,6 +6,7 @@ import type { Estimate } from './light.ts'
 import type { RouteLighting } from './routeLighting.ts'
 import type { ReportCell } from './reportLocations.ts'
 import type { CrimeImage } from './useCrimeMap.ts'
+import type { FieldSite } from './fieldMeasurements.ts'
 import { wansanBoundary } from './wansan.ts'
 
 type SDK = Awaited<ReturnType<typeof loadKakaoMap>>
@@ -67,6 +68,19 @@ export function pickDarkReport(instance: MapInstance, reports: ReportCell[], pos
   return selected
 }
 
+export function pickFieldSite(instance: MapInstance, sites: FieldSite[], position: Point) {
+  const pixel = pixels(instance)
+  const target = pixel(position)
+  let closest = 13
+  let selected: FieldSite | undefined
+  for (const site of sites) {
+    const { x, y } = pixel(site.point)
+    const gap = Math.hypot(x - target.x, y - target.y)
+    if (gap < closest) { closest = gap; selected = site }
+  }
+  return selected
+}
+
 interface Props {
   instance: MapInstance
   buildings: Building[]
@@ -76,9 +90,14 @@ interface Props {
   crime?: CrimeImage
   reports?: ReportCell[]
   reportPreview?: Point
+  fieldSites?: FieldSite[]
+  fieldPreview?: Point
+  selectedField?: string
+  publicLamps?: Point[]
 }
 
-export function LocationLayer({ instance, buildings, places, lighting, selected, crime, reports, reportPreview }: Props) {
+export function LocationLayer({ instance, buildings, places, lighting, selected, crime, reports, reportPreview,
+  fieldSites, fieldPreview, selectedField, publicLamps }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
@@ -158,6 +177,7 @@ export function LocationLayer({ instance, buildings, places, lighting, selected,
       ctx.lineWidth = 1
       if (level <= 6) {
         for (const [, , point] of places) dot(point, 3, '#086a80')
+        for (const point of publicLamps ?? []) dot(point, 4, '#996900')
       }
       if (lighting) {
         if (level <= LOW_POINT_LEVEL) {
@@ -216,6 +236,20 @@ export function LocationLayer({ instance, buildings, places, lighting, selected,
       }
       for (const report of reports ?? []) reportMarker(report.point, 7, false, report.count)
       if (reportPreview) reportMarker(reportPreview, 10, true)
+      function fieldMarker(point: Point, color: string, size: number) {
+        if (point[0] < west || point[0] > east || point[1] < south || point[1] > north) return
+        const { x, y } = pixel(point)
+        ctx.fillStyle = color
+        ctx.strokeStyle = '#fff'
+        ctx.lineWidth = 2
+        ctx.fillRect(x - size, y - size, size * 2, size * 2)
+        ctx.strokeRect(x - size, y - size, size * 2, size * 2)
+      }
+      for (const site of fieldSites ?? []) {
+        const color = site.status === 'dark' ? '#a80d2d' : site.status === 'above' ? '#0d7d6a' : '#657080'
+        fieldMarker(site.point, color, site.id === selectedField ? 8 : 6)
+      }
+      if (fieldPreview) fieldMarker(fieldPreview, '#0e6d9e', 8)
     }
 
     function schedule() {
@@ -233,7 +267,8 @@ export function LocationLayer({ instance, buildings, places, lighting, selected,
       maps.event.removeListener(map, 'bounds_changed', schedule)
       maps.event.removeListener(map, 'idle', schedule)
     }
-  }, [instance, buildings, places, lighting, selected, crime, reports, reportPreview])
+  }, [instance, buildings, places, lighting, selected, crime, reports, reportPreview,
+    fieldSites, fieldPreview, selectedField, publicLamps])
 
   return <canvas ref={canvasRef} className="location-layer" aria-hidden="true" />
 }

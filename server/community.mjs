@@ -4,6 +4,7 @@ import { dirname, extname, resolve, sep } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { reportCell, reportCellKey } from '../src/reportLocations.ts'
 import { wansanBounds } from '../src/wansan.ts'
+import { configuredLampSources, officialLampPositions } from './jeonju-lamps.mjs'
 
 for (const file of ['.env.local', '.env']) {
   if (existsSync(file)) process.loadEnvFile(file)
@@ -112,7 +113,10 @@ async function handle(req, res) {
       return res.end()
     }
     if (req.method === 'GET' && url.pathname === '/api/community/settings') {
-      return reply(res, 200, { safemap: Boolean(safeMapKey) })
+      return reply(res, 200, { safemap: Boolean(safeMapKey), lamps: configuredLampSources() })
+    }
+    if (req.method === 'GET' && url.pathname === '/api/community/jeonju-lamps') {
+      return reply(res, 200, await officialLampPositions())
     }
     if (req.method === 'GET' && url.pathname === '/api/community/reports') {
       return reply(res, 200, groupedReports.all().map(({ lng, lat, count }) => ({ point: [lng, lat], count })))
