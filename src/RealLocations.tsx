@@ -17,6 +17,7 @@ import { useCrimeMap } from './useCrimeMap.ts'
 import type { ReportCell } from './reportLocations.ts'
 import { FieldPanel, fieldLabels } from './FieldPanel.tsx'
 import { useFieldMeasurements } from './useFieldMeasurements.ts'
+import type { FieldSite } from './fieldMeasurements.ts'
 import { fetchOfficialLamps } from './communityClient.ts'
 import type { OfficialLamps } from './communityClient.ts'
 
@@ -65,7 +66,7 @@ export function RealLocations({ locations, onChange }: Props) {
   const [lampError, setLampError] = useState(false)
   const [showField, setShowField] = useState(true)
   const [fieldPicking, setFieldPicking] = useState(false)
-  const [fieldPending, setFieldPending] = useState<Point>()
+  const [fieldPending, setFieldPending] = useState<{ point: Point; site?: FieldSite }>()
   const [fieldSelected, setFieldSelected] = useState('')
   const [query, setQuery] = useState('')
   const reports = useDarkReports()
@@ -199,7 +200,7 @@ export function RealLocations({ locations, onChange }: Props) {
         setNotice('완산구 경계 안에서 실측 지점을 선택해 주세요.')
         return
       }
-      setFieldPending(point)
+      setFieldPending({ point })
       setNotice('')
       requestAnimationFrame(() => fieldSection.current?.scrollIntoView({ block: 'nearest' }))
       return
@@ -314,7 +315,7 @@ export function RealLocations({ locations, onChange }: Props) {
       </section>
       <div ref={fieldSection}>
         <FieldPanel field={field} active={fieldPicking} visible={showField} onVisible={setShowField}
-          pending={fieldPending && { point: fieldPending, label: placeLabel(fieldPending, places ?? emptyPlaces) }}
+          pending={fieldPending && { ...fieldPending, label: placeLabel(fieldPending.point, places ?? emptyPlaces) }}
           onStart={() => {
             reports.cancel()
             setPointDetail(undefined)
@@ -353,7 +354,11 @@ export function RealLocations({ locations, onChange }: Props) {
           }} />공식 범죄주의구간</label>
           <label><input type="checkbox" checked={showPublicLamps} onChange={e => setShowPublicLamps(e.target.checked)} />공개 등록 가로등 · OSM</label>
           <label><input type="checkbox" checked={showOfficialLamps} disabled={!reports.lampSources.length}
-            onChange={e => { setShowOfficialLamps(e.target.checked); setLampError(false) }} />전주시 가로등·보안등</label>
+            onChange={e => {
+              setShowOfficialLamps(e.target.checked)
+              if (e.target.checked && officialLamps?.some(source => source.error)) setOfficialLamps(undefined)
+              setLampError(false)
+            }} />전주시 가로등·보안등</label>
           {lighting && <label><input type="checkbox" checked={showLighting} onChange={e => {
             setShowLighting(e.target.checked)
             if (!e.target.checked) setPointDetail(undefined)
@@ -424,7 +429,7 @@ export function RealLocations({ locations, onChange }: Props) {
         {instance && <LocationLayer instance={instance} buildings={showBuildings ? buildings ?? emptyBuildings : emptyBuildings}
           places={showPlaces ? places ?? emptyPlaces : emptyPlaces} lighting={showLighting ? lighting : undefined}
           selected={pointDetail} crime={crime.image} reports={showReports ? reports.reports : undefined} reportPreview={reports.pending}
-          fieldSites={showField ? field.sites : undefined} fieldPreview={fieldPending} selectedField={fieldSelected}
+          fieldSites={showField ? field.sites : undefined} fieldPreview={fieldPending?.point} selectedField={fieldSelected}
           publicLamps={activeLamps} />}
         {instance && <>
           <p className="map-label" role="status">{fieldPicking ? '조도계로 측정한 보행로 지점을 누르세요.' :
@@ -457,6 +462,13 @@ export function RealLocations({ locations, onChange }: Props) {
           <p><strong>{fieldLabels[fieldDetail.status]}</strong> · 중앙값 {fieldDetail.median.toFixed(2)} lx · {fieldDetail.count}회</p>
           <p>측정 시각 {new Date(fieldDetail.measuredAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}</p>
           <p className="muted">센서 높이 {fieldDetail.heightM === null ? '미기록' : `${fieldDetail.heightM} m`} · {fieldDetail.direction || '방향 미기록'}</p>
+          {fieldDetail.reviewReason && <p className="muted">{fieldDetail.reviewReason}</p>}
+          <button className="text-button" onClick={() => {
+            setFieldPending({ point: fieldDetail.point, site: fieldDetail })
+            setFieldPicking(true)
+            setFieldSelected('')
+            requestAnimationFrame(() => fieldSection.current?.scrollIntoView({ block: 'nearest' }))
+          }}>이 지점 다시 측정</button>
         </section>}
         {pointDetail && <section className="detail map-point-detail" aria-label="저조도 지점 상세" aria-live="polite">
           <div className="section-title"><h2>저조도 지점 상세</h2><button className="text-button" onClick={() => setPointDetail(undefined)}>닫기</button></div>

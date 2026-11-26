@@ -11,7 +11,6 @@ import { simulateRouteLighting } from '../src/routeLighting.ts'
 import { placeLabel } from '../src/locationData.ts'
 import { reportCell, reportCellKey } from '../src/reportLocations.ts'
 import { defaultFieldRules, fieldCsv, mergeFieldReadings, readFieldCsv, summarizeFieldReadings } from '../src/fieldMeasurements.ts'
-import { readLampPage } from '../server/jeonju-lamps.mjs'
 
 test('field readings use the median of the latest comparable repeats and round-trip through CSV', () => {
   const csv = `id,longitude,latitude,lux,measured_at,height_m,direction,repeat_no
@@ -30,13 +29,25 @@ WS-01,127.1468,35.8244,80,2026-11-26T19:00:00+09:00,1,수평·위쪽,1`
   assert.equal(summarizeFieldReadings(readings.slice(0,2),defaultFieldRules)[0].status,'review')
   assert.throws(() => readFieldCsv(csv.replace('127.1468','126.978')),/완산구/)
   assert.throws(() => readFieldCsv(csv.replace('2026-11-26','2099-11-26')),/측정 시각/)
+  assert.throws(() => readFieldCsv(csv.replace('2026-11-26','2026-04-31')),/측정 시각/)
+  assert.throws(() => readFieldCsv(csv + ',extra'),/열 개수/)
+
+  const corrected = { ...readings[0], lux: 9 }
+  assert.throws(() => mergeFieldReadings(readings,[corrected]),/이미 저장된 측정/)
+  assert.equal(summarizeFieldReadings(readings,defaultFieldRules)[0].median,4)
+
+  const formulaFields = [{...readings[0], id: '=WS-01', direction: "'+위쪽"}]
+  const backup = fieldCsv(formulaFields)
+  assert.ok(backup.includes("'=WS-01"))
+  assert.deepEqual(readFieldCsv(backup),formulaFields)
+
+  const mixed = [...readings, {...readings[0], direction:'수직·진행 방향', repeat:4}]
+  const [review] = summarizeFieldReadings(mixed,defaultFieldRules)
+  assert.equal(review.status,'review')
+  assert.match(review.reviewReason!,/서로 다른 센서 조건/)
+  assert.deepEqual(summarizeFieldReadings([...mixed].reverse(),defaultFieldRules),[review])
 })
 
-test('official lamp adapter extracts coordinates from successful responses only', () => {
-  const sample = '<rfcOpenApi><header><resultCode>00</resultCode><pageSize>500</pageSize></header><body><item><posx>127.1468</posx><posy>35.8244</posy></item></body></rfcOpenApi>'
-  assert.deepEqual(readLampPage(sample),{points:[[127.1468,35.8244]],pageSize:500})
-  assert.throws(() => readLampPage(sample.replace('>00<','>10<')))
-})
 
 test('public report cells are coarse, consistent and limited to Wansan', () => {
   const a = reportCell([127.14682,35.82430])

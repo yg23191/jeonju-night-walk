@@ -25,6 +25,7 @@ export interface FieldSite {
   heightM: number | null
   direction: string
   status: 'dark' | 'above' | 'review'
+  reviewReason?: string
 }
 
 function csvRows(input: string) {
@@ -57,17 +58,28 @@ function csvRows(input: string) {
   return rows
 }
 
+function measurementTime(text: string) {
+  const match = /^(\d{4}-\d\d-\d\d)T([01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|[+-]\d\d:\d\d)$/.exec(text)
+  if (!match) return NaN
+  const midnight = new Date(match[1] + 'T00:00:00Z')
+  if (!Number.isFinite(midnight.getTime()) || midnight.toISOString().slice(0, 10) !== match[1]) return NaN
+  return Date.parse(text)
+}
+
+const escapedCell = /^'([']*[=+\-@])/
+const needsCellEscape = /^'*[=+\-@]/
+const restoreTextCell = (value: string) => value.replace(escapedCell, '$1')
+
 export function validateFieldReading(reading: FieldReading) {
-  if (!reading.id || reading.id.length > 64 || !validPoint(reading.point) || !inWansan(reading.point) ||
+  const time = measurementTime(reading.measuredAt)
+  if (typeof reading.id !== 'string' || !reading.id.trim() || reading.id.length > 64 || !validPoint(reading.point) || !inWansan(reading.point) ||
       typeof reading.lux !== 'number' || !Number.isFinite(reading.lux) || reading.lux < 0 || reading.lux > 200000 ||
-      !/^\d{4}-\d\d-\d\dT\d\d:\d\d(?::\d\d(?:\.\d+)?)?(?:Z|[+-]\d\d:\d\d)$/.test(reading.measuredAt) ||
-      !Number.isFinite(Date.parse(reading.measuredAt)) ||
-      Date.parse(reading.measuredAt) > Date.now() + 5 * 60 * 1000 ||
+      !Number.isFinite(time) || time > Date.now() + 5 * 60 * 1000 ||
       (reading.heightM !== null && (!Number.isFinite(reading.heightM) || reading.heightM < 0 || reading.heightM > 50)) ||
-      reading.direction.length > 40 || !Number.isInteger(reading.repeat) || reading.repeat < 1) {
+      typeof reading.direction !== 'string' || reading.direction.length > 40 || !Number.isInteger(reading.repeat) || reading.repeat < 1) {
     throw new Error('지점 ID, 완산구 좌표, 조도, 측정 시각, 센서 조건과 반복 번호를 확인해 주세요.')
   }
-  return { ...reading, measuredAt: new Date(reading.measuredAt).toISOString() }
+  return { ...reading, id: reading.id.trim(), direction: reading.direction.trim(), measuredAt: new Date(time).toISOString() }
 }
 
 export function readFieldCsv(text: string): FieldReading[] {
@@ -81,14 +93,15 @@ export function readFieldCsv(text: string): FieldReading[] {
     const get = (name: string) => row[header.indexOf(name)] ?? ''
     const number = (name: string) => get(name) === '' ? NaN : Number(get(name))
     try {
-      const id = get('id')
+      if (row.length !== header.length) throw new Error('헤더와 열 개수가 다릅니다.')
+      const id = restoreTextCell(get('id'))
       const measuredAt = get('measured_at')
-      const key = JSON.stringify([id, Date.parse(measuredAt)])
+      const key = JSON.stringify([id, measurementTime(measuredAt)])
       const repeat = get('repeat_no') ? number('repeat_no') : (visits.get(key) ?? 0) + 1
       visits.set(key, Math.max(visits.get(key) ?? 0, repeat))
       return validateFieldReading({
         id, point: [number('longitude'), number('latitude')], lux: number('lux'), measuredAt,
-        heightM: get('height_m') ? number('height_m') : null, direction: get('direction'), repeat
+        heightM: get('height_m') ? number('height_m') : null, direction: restoreTextCell(get('direction')), repeat
       })
     } catch (error) {
       throw new Error(`CSV 데이터 행 ${i + 1} · ${(error as Error).message}`)
@@ -104,7 +117,16 @@ export function mergeFieldReadings(previous: FieldReading[], incoming: FieldRead
     const initial = points.get(reading.id)
     if (initial && distance(initial, reading.point) > 5) throw new Error(`같은 지점 ID의 위치가 일치하지 않습니다. ID ${reading.id}`)
     points.set(reading.id, initial ?? reading.point)
-    combined.set(JSON.stringify([reading.id, reading.measuredAt, reading.repeat]), reading)
+    const key = JSON.stringify([reading.id, reading.measuredAt, reading.repeat])
+    const existing = combined.get(key)
+    if (existing) {
+      if (existing.point[0] !== reading.point[0] || existing.point[1] !== reading.point[1] ||
+          existing.lux !== reading.lux || existing.heightM !== reading.heightM || existing.direction !== reading.direction) {
+        throw new Error(`이미 저장된 측정과 값이 다릅니다. 지점 ID ${reading.id}, 반복 ${reading.repeat}회`)
+      }
+      continue
+    }
+    combined.set(key, reading)
   }
   return [...combined.values()]
 }
@@ -117,17 +139,24 @@ export function summarizeFieldReadings(readings: FieldReading[], rules: FieldRul
     bySite.set(reading.id, group)
   }
   return [...bySite].map(([id, group]) => {
-    const latest = group.reduce((best, reading) => reading.measuredAt > best.measuredAt ? reading : best)
+    const condition = (reading: FieldReading) => JSON.stringify([reading.heightM, reading.direction])
+    const latest = group.reduce((best, reading) =>
+      reading.measuredAt > best.measuredAt ||
+      (reading.measuredAt === best.measuredAt && condition(reading) < condition(best)) ? reading : best)
     const time = Date.parse(latest.measuredAt)
-    const current = group.filter(reading => time - Date.parse(reading.measuredAt) <= 15 * 60 * 1000 &&
-      reading.heightM === latest.heightM && reading.direction === latest.direction)
+    const matchingConditions = (reading: FieldReading) => reading.heightM === latest.heightM && reading.direction === latest.direction
+    const mixed = group.some(reading => reading.measuredAt === latest.measuredAt && !matchingConditions(reading))
+    const current = group.filter(reading => time - Date.parse(reading.measuredAt) <= 15 * 60 * 1000 && matchingConditions(reading))
     const values = current.map(reading => reading.lux).sort((a,b) => a - b)
     const middle = Math.floor(values.length / 2)
     const median = values.length % 2 ? values[middle] : (values[middle - 1] + values[middle]) / 2
-    const status = values.length < rules.minReadings || latest.heightM === null || !latest.direction ?
-      'review' : median < rules.threshold ? 'dark' : 'above'
+    let reviewReason: string | undefined
+    if (mixed) reviewReason = '같은 시각에 서로 다른 센서 조건이 기록됐습니다.'
+    else if (latest.heightM === null || !latest.direction) reviewReason = '센서 높이와 방향을 모두 기록해야 합니다.'
+    else if (values.length < rules.minReadings) reviewReason = `같은 조건의 측정값이 ${rules.minReadings}회 필요합니다.`
+    const status = reviewReason ? 'review' : median < rules.threshold ? 'dark' : 'above'
     return { id, point: latest.point, median, count: values.length, measuredAt: latest.measuredAt,
-      heightM: latest.heightM, direction: latest.direction, status }
+      heightM: latest.heightM, direction: latest.direction, status, reviewReason }
   })
 }
 
@@ -136,7 +165,7 @@ export function fieldCsv(readings: FieldReading[]) {
     [reading.id, ...reading.point, reading.lux, reading.measuredAt, reading.heightM, reading.direction, reading.repeat]
       .map(value => {
         const text = String(value ?? '')
-        const safe = typeof value === 'string' && /^[=+\-@]/.test(text) ? "'" + text : text
+        const safe = typeof value === 'string' && needsCellEscape.test(text) ? "'" + text : text
         return '"' + safe.replaceAll('"', '""') + '"'
       }).join(',')).join('\r\n')
 }

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { defaultFieldRules, mergeFieldReadings, summarizeFieldReadings } from './fieldMeasurements.ts'
 import type { FieldReading, FieldRules } from './fieldMeasurements.ts'
 
@@ -7,7 +7,12 @@ const ruleKey = 'wansan-field-rules-v1'
 
 function savedReadings(): FieldReading[] {
   try { return mergeFieldReadings([], JSON.parse(localStorage.getItem(readingKey) ?? '[]')) }
-  catch { return [] }
+  catch { throw new Error('이 브라우저의 실측 기록을 읽을 수 없어 기존 기록을 보호했습니다.') }
+}
+
+function loadReadings() {
+  try { return { readings: savedReadings(), storageIssue: '' } }
+  catch (error) { return { readings: [], storageIssue: (error as Error).message } }
 }
 
 function savedRules(): FieldRules {
@@ -19,14 +24,24 @@ function savedRules(): FieldRules {
 }
 
 export function useFieldMeasurements() {
-  const [readings, setReadings] = useState(savedReadings)
+  const [{ readings, storageIssue }, setStored] = useState(loadReadings)
   const [rules, setRules] = useState(savedRules)
   const sites = useMemo(() => summarizeFieldReadings(readings, rules), [readings, rules])
+
+  useEffect(() => {
+    function sync(event: StorageEvent) {
+      if (event.storageArea !== localStorage) return
+      if (event.key === readingKey || event.key === null) setStored(loadReadings())
+      if (event.key === ruleKey || event.key === null) setRules(savedRules())
+    }
+    window.addEventListener('storage', sync)
+    return () => window.removeEventListener('storage', sync)
+  }, [])
 
   function store(incoming: FieldReading[]) {
     const merged = mergeFieldReadings(savedReadings(), incoming)
     localStorage.setItem(readingKey, JSON.stringify(merged))
-    setReadings(merged)
+    setStored({ readings: merged, storageIssue: '' })
   }
 
   function changeRules(next: FieldRules) {
@@ -37,8 +52,8 @@ export function useFieldMeasurements() {
   function removeSite(id: string) {
     const remaining = savedReadings().filter(reading => reading.id !== id)
     localStorage.setItem(readingKey, JSON.stringify(remaining))
-    setReadings(remaining)
+    setStored({ readings: remaining, storageIssue: '' })
   }
 
-  return { readings, rules, sites, store, changeRules, removeSite }
+  return { readings, rules, sites, storageIssue, store, changeRules, removeSite }
 }
