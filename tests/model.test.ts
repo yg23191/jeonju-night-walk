@@ -36,10 +36,19 @@ WS-01,127.1468,35.8244,80,2026-11-26T19:00:00+09:00,1,수평·위쪽,1`
   assert.throws(() => mergeFieldReadings(readings,[corrected]),/이미 저장된 측정/)
   assert.equal(summarizeFieldReadings(readings,defaultFieldRules)[0].median,4)
 
-  const formulaFields = [{...readings[0], id: '=WS-01', direction: "'+위쪽"}]
+  const formulaFields = [{...readings[0], id: '=WS-01', direction: "'+위쪽", siteName: '=경기전 서쪽 보행로'}]
   const backup = fieldCsv(formulaFields)
   assert.ok(backup.includes("'=WS-01"))
   assert.deepEqual(readFieldCsv(backup),formulaFields)
+
+  const namedReading = { ...readings[0], siteName: '경기전 서쪽 보행로' }
+  const named = mergeFieldReadings(readings, [namedReading])
+  assert.equal(named.length, readings.length)
+  assert.deepEqual(mergeFieldReadings(named, readings), named)
+  assert.equal(summarizeFieldReadings(named, defaultFieldRules)[0].siteName, namedReading.siteName)
+  assert.equal(summarizeFieldReadings([...named, { ...readings[2], repeat: 4, siteName: '경기전 서쪽 횡단보도' }],
+    defaultFieldRules)[0].siteName, '경기전 서쪽 횡단보도')
+  assert.throws(() => mergeFieldReadings(named, [{ ...namedReading, siteName: '다른 이름' }]), /이미 저장된 측정/)
 
   const mixed = [...readings, {...readings[0], direction:'수직·진행 방향', repeat:4}]
   const [review] = summarizeFieldReadings(mixed,defaultFieldRules)

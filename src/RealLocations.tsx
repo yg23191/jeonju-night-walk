@@ -315,7 +315,7 @@ export function RealLocations({ locations, onChange }: Props) {
       </section>
       <div ref={fieldSection}>
         <FieldPanel field={field} active={fieldPicking} visible={showField} onVisible={setShowField}
-          pending={fieldPending && { ...fieldPending, label: placeLabel(fieldPending.point, places ?? emptyPlaces) }}
+          pending={fieldPending && { ...fieldPending, label: placeLabel(fieldPending.point, places ?? emptyPlaces, fieldPending.site?.siteName) }}
           onStart={() => {
             reports.cancel()
             setPointDetail(undefined)
@@ -336,7 +336,7 @@ export function RealLocations({ locations, onChange }: Props) {
             setFieldSelected(site.id)
             focusPoint(site.point)
             container.current?.scrollIntoView({ block: 'nearest' })
-          }} titleFor={site => placeLabel(site.point, places ?? emptyPlaces)} />
+          }} titleFor={site => placeLabel(site.point, places ?? emptyPlaces, site.siteName)} />
       </div>
       <section aria-label="시민 제보와 범죄주의구간">
         <h2>시민 제보와 범죄주의구간</h2>
@@ -458,7 +458,7 @@ export function RealLocations({ locations, onChange }: Props) {
           <p>어두워서 피하고 싶은 곳 · 제보 {formatCount(reportDetail.count)}건</p>
         </section>}
         {fieldDetail && <section className="detail map-point-detail" aria-label="현장 실측 상세" aria-live="polite">
-          <div className="section-title"><h2>{placeLabel(fieldDetail.point, places ?? emptyPlaces)}</h2>
+          <div className="section-title"><h2>{placeLabel(fieldDetail.point, places ?? emptyPlaces, fieldDetail.siteName)}</h2>
             <button className="text-button" onClick={() => setFieldSelected('')}>닫기</button></div>
           <p><strong>{fieldLabels[fieldDetail.status]}</strong> · 중앙값 {fieldDetail.median.toFixed(2)} lx · {fieldDetail.count}회</p>
           <p>측정 시각 {new Date(fieldDetail.measuredAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}</p>

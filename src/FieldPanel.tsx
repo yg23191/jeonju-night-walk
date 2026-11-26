@@ -48,6 +48,7 @@ export function FieldPanel({ field, active, visible, onVisible, pending, onStart
     if (!pending) return
     const data = new FormData(event.currentTarget)
     const id = String(data.get('id')).trim()
+    const siteName = String(data.get('siteName')).trim()
     const lux = data.getAll('lux').map(String).filter(value => value.trim() !== '').map(Number)
     if (!lux.length) {
       setMessage('조도 측정값을 한 개 이상 입력해 주세요.')
@@ -58,7 +59,7 @@ export function FieldPanel({ field, active, visible, onVisible, pending, onStart
       const old = field.readings.filter(row => row.id === id && Date.parse(row.measuredAt) === Date.parse(measuredAt))
       const maxRepeat = Math.max(0, ...old.map(row => row.repeat))
       field.store(lux.map((value, index) => ({
-        id, point: pending.point, lux: value, measuredAt,
+        id, siteName, point: pending.point, lux: value, measuredAt,
         heightM: Number(data.get('height')), direction: String(data.get('direction')), repeat: maxRepeat + index + 1
       })))
       onSaved(id)
@@ -92,6 +93,8 @@ export function FieldPanel({ field, active, visible, onVisible, pending, onStart
       <strong>{pending.label}</strong>
       <label>지점 ID<input required name="id" maxLength={64} readOnly={Boolean(pending.site)}
         defaultValue={pending.site?.id ?? `WS-${Math.round(pending.point[0] * 100000)}-${Math.round(pending.point[1] * 100000)}`} /></label>
+      <label>지점 이름 · 선택<input name="siteName" maxLength={80} defaultValue={pending.site?.siteName ?? ''}
+        placeholder="예시 경기전 서쪽 보행로" /></label>
       <label>측정 시각 · 한국시간<input required type="datetime-local" name="time" step="1" defaultValue={seoulTime.format(new Date()).replace(' ', 'T')} /></label>
       <fieldset><legend>반복 측정값 · lx</legend>
         {[1, 2, 3].map(i => <input key={i} aria-label={`${i}회 측정값`} type="number" name="lux" min="0" max="200000" step="any" placeholder={i + '회'} />)}

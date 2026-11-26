@@ -4,6 +4,7 @@ import { inWansan } from './wansan.ts'
 
 export interface FieldReading {
   id: string
+  siteName?: string
   point: Point
   lux: number
   measuredAt: string
@@ -14,10 +15,11 @@ export interface FieldReading {
 
 export interface FieldRules { threshold: number; minReadings: number }
 export const defaultFieldRules: FieldRules = { threshold: 5, minReadings: 3 }
-export const fieldTemplate = 'id,longitude,latitude,lux,measured_at,height_m,direction,repeat_no\r\n'
+export const fieldTemplate = 'id,longitude,latitude,lux,measured_at,height_m,direction,repeat_no,site_name\r\n'
 
 export interface FieldSite {
   id: string
+  siteName?: string
   point: Point
   median: number
   count: number
@@ -73,13 +75,17 @@ const restoreTextCell = (value: string) => value.replace(escapedCell, '$1')
 export function validateFieldReading(reading: FieldReading) {
   const time = measurementTime(reading.measuredAt)
   if (typeof reading.id !== 'string' || !reading.id.trim() || reading.id.length > 64 || !validPoint(reading.point) || !inWansan(reading.point) ||
+      (reading.siteName !== undefined && (typeof reading.siteName !== 'string' || reading.siteName.trim().length > 80)) ||
       typeof reading.lux !== 'number' || !Number.isFinite(reading.lux) || reading.lux < 0 || reading.lux > 200000 ||
       !Number.isFinite(time) || time > Date.now() + 5 * 60 * 1000 ||
       (reading.heightM !== null && (!Number.isFinite(reading.heightM) || reading.heightM < 0 || reading.heightM > 50)) ||
       typeof reading.direction !== 'string' || reading.direction.length > 40 || !Number.isInteger(reading.repeat) || reading.repeat < 1) {
-    throw new Error('지점 ID, 완산구 좌표, 조도, 측정 시각, 센서 조건과 반복 번호를 확인해 주세요.')
+    throw new Error('지점 ID와 이름, 완산구 좌표, 조도, 측정 시각, 센서 조건과 반복 번호를 확인해 주세요.')
   }
-  return { ...reading, id: reading.id.trim(), direction: reading.direction.trim(), measuredAt: new Date(time).toISOString() }
+  const { siteName, ...measurement } = reading
+  const name = siteName?.trim()
+  return { ...measurement, ...(name ? { siteName: name } : {}), id: reading.id.trim(),
+    direction: reading.direction.trim(), measuredAt: new Date(time).toISOString() }
 }
 
 export function readFieldCsv(text: string): FieldReading[] {
@@ -100,7 +106,7 @@ export function readFieldCsv(text: string): FieldReading[] {
       const repeat = get('repeat_no') ? number('repeat_no') : (visits.get(key) ?? 0) + 1
       visits.set(key, Math.max(visits.get(key) ?? 0, repeat))
       return validateFieldReading({
-        id, point: [number('longitude'), number('latitude')], lux: number('lux'), measuredAt,
+        id, siteName: restoreTextCell(get('site_name')), point: [number('longitude'), number('latitude')], lux: number('lux'), measuredAt,
         heightM: get('height_m') ? number('height_m') : null, direction: restoreTextCell(get('direction')), repeat
       })
     } catch (error) {
@@ -121,9 +127,11 @@ export function mergeFieldReadings(previous: FieldReading[], incoming: FieldRead
     const existing = combined.get(key)
     if (existing) {
       if (existing.point[0] !== reading.point[0] || existing.point[1] !== reading.point[1] ||
-          existing.lux !== reading.lux || existing.heightM !== reading.heightM || existing.direction !== reading.direction) {
+          existing.lux !== reading.lux || existing.heightM !== reading.heightM || existing.direction !== reading.direction ||
+          (existing.siteName && reading.siteName && existing.siteName !== reading.siteName)) {
         throw new Error(`이미 저장된 측정과 값이 다릅니다. 지점 ID ${reading.id}, 반복 ${reading.repeat}회`)
       }
+      if (!existing.siteName && reading.siteName) combined.set(key, reading)
       continue
     }
     combined.set(key, reading)
@@ -155,14 +163,20 @@ export function summarizeFieldReadings(readings: FieldReading[], rules: FieldRul
     else if (latest.heightM === null || !latest.direction) reviewReason = '센서 높이와 방향을 모두 기록해야 합니다.'
     else if (values.length < rules.minReadings) reviewReason = `같은 조건의 측정값이 ${rules.minReadings}회 필요합니다.`
     const status = reviewReason ? 'review' : median < rules.threshold ? 'dark' : 'above'
-    return { id, point: latest.point, median, count: values.length, measuredAt: latest.measuredAt,
+    const latestNamed = group.reduce<FieldReading | undefined>((best, reading) => {
+      if (!reading.siteName) return best
+      if (!best || reading.measuredAt > best.measuredAt ||
+          (reading.measuredAt === best.measuredAt && reading.repeat > best.repeat)) return reading
+      return best
+    }, undefined)
+    return { id, siteName: latestNamed?.siteName, point: latest.point, median, count: values.length, measuredAt: latest.measuredAt,
       heightM: latest.heightM, direction: latest.direction, status, reviewReason }
   })
 }
 
 export function fieldCsv(readings: FieldReading[]) {
   return fieldTemplate + readings.map(reading =>
-    [reading.id, ...reading.point, reading.lux, reading.measuredAt, reading.heightM, reading.direction, reading.repeat]
+    [reading.id, ...reading.point, reading.lux, reading.measuredAt, reading.heightM, reading.direction, reading.repeat, reading.siteName]
       .map(value => {
         const text = String(value ?? '')
         const safe = typeof value === 'string' && needsCellEscape.test(text) ? "'" + text : text
