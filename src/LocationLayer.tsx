@@ -4,6 +4,9 @@ import type { Building, Place } from './locationData.ts'
 import type { Point } from './gis.ts'
 import type { Estimate } from './light.ts'
 import type { RouteLighting } from './routeLighting.ts'
+import type { ReportCell } from './reportLocations.ts'
+import type { CrimeImage } from './useCrimeMap.ts'
+import { wansanBoundary } from './wansan.ts'
 
 type SDK = Awaited<ReturnType<typeof loadKakaoMap>>
 export type MapInstance = { maps: SDK; map: InstanceType<SDK['Map']> }
@@ -48,15 +51,34 @@ export function pickLowLight(instance: MapInstance, lighting: RouteLighting, pos
   return nearest
 }
 
+export function pickDarkReport(instance: MapInstance, reports: ReportCell[], position: Point) {
+  const pixel = pixels(instance)
+  const target = pixel(position)
+  let closest = 13
+  let selected: ReportCell | undefined
+  for (const report of reports) {
+    const { x, y } = pixel(report.point)
+    const gap = Math.hypot(x - target.x, y - target.y)
+    if (gap < closest) {
+      closest = gap
+      selected = report
+    }
+  }
+  return selected
+}
+
 interface Props {
   instance: MapInstance
   buildings: Building[]
   places: Place[]
   lighting?: RouteLighting
   selected?: Estimate
+  crime?: CrimeImage
+  reports?: ReportCell[]
+  reportPreview?: Point
 }
 
-export function LocationLayer({ instance, buildings, places, lighting, selected }: Props) {
+export function LocationLayer({ instance, buildings, places, lighting, selected, crime, reports, reportPreview }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
@@ -101,6 +123,27 @@ export function LocationLayer({ instance, buildings, places, lighting, selected 
           ctx.fill('evenodd')
           ctx.stroke()
         }
+      }
+      if (crime) {
+        const [minLng, minLat, maxLng, maxLat] = crime.bounds
+        const topLeft = pixel([minLng, maxLat])
+        const topRight = pixel([maxLng, maxLat])
+        const bottomLeft = pixel([minLng, minLat])
+        ctx.save()
+        ctx.beginPath()
+        for (const ring of wansanBoundary) {
+          ring.forEach((point, index) => {
+            const { x, y } = pixel(point)
+            if (index === 0) ctx.moveTo(x, y)
+            else ctx.lineTo(x, y)
+          })
+          ctx.closePath()
+        }
+        ctx.clip('evenodd')
+        ctx.transform(topRight.x - topLeft.x, topRight.y - topLeft.y,
+          bottomLeft.x - topLeft.x, bottomLeft.y - topLeft.y, topLeft.x, topLeft.y)
+        ctx.drawImage(crime.image, 0, 0, 1, 1)
+        ctx.restore()
       }
       function dot(point: Point, radius: number, color: string) {
         if (point[0] < west || point[0] > east || point[1] < south || point[1] > north) return
@@ -148,6 +191,31 @@ export function LocationLayer({ instance, buildings, places, lighting, selected 
           dot(selected.point, 7, '#b4112c')
         }
       }
+      function reportMarker(point: Point, radius: number, preview: boolean, count = 1) {
+        if (point[0] < west || point[0] > east || point[1] < south || point[1] > north) return
+        const { x, y } = pixel(point)
+        ctx.fillStyle = preview ? '#fff' : '#6432a0'
+        ctx.strokeStyle = preview ? '#6432a0' : '#fff'
+        ctx.lineWidth = 2
+        ctx.beginPath()
+        ctx.moveTo(x, y - radius)
+        ctx.lineTo(x + radius, y)
+        ctx.lineTo(x, y + radius)
+        ctx.lineTo(x - radius, y)
+        ctx.closePath()
+        ctx.fill()
+        ctx.stroke()
+        if (count > 1 && level <= 5) {
+          ctx.font = '600 11px system-ui'
+          ctx.strokeStyle = '#fff'
+          ctx.lineWidth = 3
+          ctx.strokeText(String(count), x + radius + 2, y + 3)
+          ctx.fillStyle = '#41276a'
+          ctx.fillText(String(count), x + radius + 2, y + 3)
+        }
+      }
+      for (const report of reports ?? []) reportMarker(report.point, 7, false, report.count)
+      if (reportPreview) reportMarker(reportPreview, 10, true)
     }
 
     function schedule() {
@@ -165,7 +233,7 @@ export function LocationLayer({ instance, buildings, places, lighting, selected 
       maps.event.removeListener(map, 'bounds_changed', schedule)
       maps.event.removeListener(map, 'idle', schedule)
     }
-  }, [instance, buildings, places, lighting, selected])
+  }, [instance, buildings, places, lighting, selected, crime, reports, reportPreview])
 
   return <canvas ref={canvasRef} className="location-layer" aria-hidden="true" />
 }

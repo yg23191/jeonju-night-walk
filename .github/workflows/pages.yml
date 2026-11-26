@@ -26,6 +26,7 @@ jobs:
       - run: npm run build
         env:
           VITE_KAKAO_MAP_JS_KEY: ${{ vars.VITE_KAKAO_MAP_JS_KEY }}
+          VITE_COMMUNITY_API_URL: ${{ vars.VITE_COMMUNITY_API_URL }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

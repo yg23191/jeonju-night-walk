@@ -8,6 +8,26 @@ import { demoRoutes } from '../src/routes.ts'
 import { inWansan } from '../src/wansan.ts'
 import { findWalkingPath } from '../src/walkingNetwork.ts'
 import { simulateRouteLighting } from '../src/routeLighting.ts'
+import { placeLabel } from '../src/locationData.ts'
+import { reportCell, reportCellKey } from '../src/reportLocations.ts'
+
+test('public report cells are coarse, consistent and limited to Wansan', () => {
+  const a = reportCell([127.14682,35.82430])
+  const b = reportCell([127.14681,35.82432])
+  assert.ok(a && b)
+  assert.equal(reportCellKey(a),reportCellKey(b))
+  assert.deepEqual(reportCell(a),a)
+  assert.equal(reportCell([127.161,35.849]),undefined)
+  assert.equal(reportCell([127.1468,'35.8244']),undefined)
+})
+
+test('endpoint labels prefer the selected name and identify nearby public places', () => {
+  const place = [['전주시청','government',[127.1468,35.8244]]] as const
+  assert.equal(placeLabel([127.1468,35.8244],[...place]),'전주시청')
+  assert.equal(placeLabel([127.1469,35.8244],[...place]),'전주시청 인근')
+  assert.equal(placeLabel([127.1469,35.8244],[...place],'선택한 장소'),'선택한 장소')
+  assert.equal(placeLabel([127.131,35.81],[...place]),'이름이 등록되지 않은 지점')
+})
 
 test('actual point selection is limited to Wansan-gu', () => {
   assert.equal(inWansan([127.148, 35.824]), true)
@@ -17,7 +37,7 @@ test('actual point selection is limited to Wansan-gu', () => {
 
 test('the example can be routed through the Wansan-gu walking network', () => {
   const network = JSON.parse(readFileSync(new URL('../public/data/wansan-walking.json', import.meta.url), 'utf8'))
-  const route = findWalkingPath(network,[127.14865,35.82315],[127.15015,35.81613])
+  const route = findWalkingPath(network,[127.147983,35.824229],[127.149739,35.815119])
   assert.ok(route && route.meters > 800 && route.line.length > 3)
   assert.ok(route.line.every(inWansan))
   const lighting = simulateRouteLighting(route.line)

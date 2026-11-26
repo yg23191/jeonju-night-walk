@@ -2,9 +2,9 @@ import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 import { loadKakaoMap } from './KakaoMap.tsx'
 import { distance } from './gis.ts'
 import type { Point } from './gis.ts'
-import { LocationLayer, LOW_POINT_LEVEL, pickLowLight } from './LocationLayer.tsx'
+import { LocationLayer, LOW_POINT_LEVEL, pickDarkReport, pickLowLight } from './LocationLayer.tsx'
 import type { MapInstance } from './LocationLayer.tsx'
-import { readLocationData } from './locationData.ts'
+import { placeLabel, readLocationData } from './locationData.ts'
 import type { Building, Place } from './locationData.ts'
 import { inWansan, wansanBoundary } from './wansan.ts'
 import { findWalkingPath } from './walkingNetwork.ts'
@@ -12,14 +12,21 @@ import type { WalkingNetwork } from './walkingNetwork.ts'
 import { simulateRouteLighting } from './routeLighting.ts'
 import { settings } from './light.ts'
 import type { Estimate } from './light.ts'
+import { useDarkReports } from './useDarkReports.ts'
+import { useCrimeMap } from './useCrimeMap.ts'
+import type { ReportCell } from './reportLocations.ts'
 
 type End = 'from' | 'to'
-export type Locations = Partial<Record<End, Point>>
+type SelectedLocation = { point: Point; name?: string }
+export type Locations = Partial<Record<End, SelectedLocation>>
 const ends = ['from', 'to'] as const
 const names = { from: '출발지', to: '도착지' }
 const emptyBuildings: Building[] = []
 const emptyPlaces: Place[] = []
-const example: Locations = { from: [127.14865,35.82315], to: [127.15015,35.81613] }
+const example: Locations = {
+  from: { point: [127.147983,35.824229], name: '전주시청' },
+  to: { point: [127.149739,35.815119], name: '경기전' }
+}
 const formatCount = (count: number) => count.toLocaleString('ko-KR')
 const meters = (value: number) => `${formatCount(Math.round(value))} m`
 
@@ -33,6 +40,7 @@ export function RealLocations({ locations, onChange }: Props) {
   const [picking, setPicking] = useState<End>(locations.from && !locations.to ? 'to' : 'from')
   const [editing, setEditing] = useState(!locations.from || !locations.to)
   const [pointDetail, setPointDetail] = useState<Estimate>()
+  const [reportDetail, setReportDetail] = useState<ReportCell>()
   const [notice, setNotice] = useState('')
   const [failed, setFailed] = useState(false)
   const [instance, setInstance] = useState<MapInstance>()
@@ -42,12 +50,17 @@ export function RealLocations({ locations, onChange }: Props) {
   const [dataErrors, setDataErrors] = useState<string[]>([])
   const [showBuildings, setShowBuildings] = useState(true)
   const [showPlaces, setShowPlaces] = useState(false)
+  const [showCrime, setShowCrime] = useState(false)
+  const [showReports, setShowReports] = useState(true)
+  const [showLighting, setShowLighting] = useState(true)
   const [query, setQuery] = useState('')
+  const reports = useDarkReports()
+  const crime = useCrimeMap(instance, showCrime, reports.safemap)
   const searchTerm = query.trim().toLocaleLowerCase('ko-KR').replace(/\s+/g, '')
   const matches = useMemo(() => searchTerm && places ?
     places.filter(([name]) => name.toLocaleLowerCase('ko-KR').replace(/\s+/g, '').includes(searchTerm)) : [], [places, searchTerm])
   const route = useMemo(() => network && locations.from && locations.to ?
-    findWalkingPath(network, locations.from, locations.to) : undefined, [network, locations])
+    findWalkingPath(network, locations.from.point, locations.to.point) : undefined, [network, locations])
   const lighting = useMemo(() => route ? simulateRouteLighting(route.line) : undefined, [route])
 
   useEffect(() => {
@@ -93,7 +106,7 @@ export function RealLocations({ locations, onChange }: Props) {
     if (!instance) return
     const { maps, map } = instance
     const points = ends.flatMap(end => locations[end] ?
-      [{ point: locations[end]!, label: names[end], role: end }] : [])
+      [{ point: locations[end]!.point, label: names[end], role: end }] : [])
     const pins = points.map(({ point, label, role }) => {
       const [longitude, latitude] = point
       const element = document.createElement('span')
@@ -116,31 +129,47 @@ export function RealLocations({ locations, onChange }: Props) {
     return () => { outline.setMap(null); line.setMap(null) }
   }, [instance, route])
 
-  function select(point: Point) {
+  function select(point: Point, name?: string) {
     if (!inWansan(point)) {
       setNotice('완산구 경계 안의 위치를 선택해 주세요.')
       return
     }
     const other = picking === 'from' ? 'to' : 'from'
-    const otherPoint = locations[other]
+    const otherPoint = locations[other]?.point
     if (otherPoint && distance(point, otherPoint) < 1) {
       setNotice('출발지와 도착지를 서로 다른 지점으로 선택해 주세요.')
       return
     }
-    onChange({ ...locations, [picking]: point })
+    onChange({ ...locations, [picking]: { point, name } })
     setNotice('')
     setPointDetail(undefined)
+    setReportDetail(undefined)
     setEditing(!otherPoint)
     if (!otherPoint) setPicking(other)
   }
   const mapSelect = useEffectEvent((point: Point) => {
+    if (reports.placing) {
+      reports.choose(point)
+      return
+    }
+    if (instance && showReports) {
+      const report = pickDarkReport(instance, reports.reports, point)
+      if (report) {
+        setReportDetail(report)
+        setPointDetail(undefined)
+        return
+      }
+    }
     if (editing || !route) {
       select(point)
       return
     }
-    if (instance && lighting) {
+    if (instance && lighting && showLighting) {
       const detail = pickLowLight(instance, lighting, point)
-      if (detail) setPointDetail(detail)
+      if (detail) {
+        setReportDetail(undefined)
+        setPointDetail(detail)
+      }
     }
   })
 
@@ -166,14 +195,16 @@ export function RealLocations({ locations, onChange }: Props) {
   }
 
   function showExample() {
+    reports.cancel()
     onChange(example)
     setPicking('from')
     setNotice('')
     setPointDetail(undefined)
+    setReportDetail(undefined)
     setEditing(false)
     if (!instance) return
     const bounds = new instance.maps.LatLngBounds()
-    for (const [longitude, latitude] of Object.values(example)) {
+    for (const { point: [longitude, latitude] } of Object.values(example)) {
       bounds.extend(new instance.maps.LatLng(latitude, longitude))
     }
     instance.map.setBounds(bounds, 72)
@@ -185,24 +216,62 @@ export function RealLocations({ locations, onChange }: Props) {
         <div className="section-title">
           <h2>출발지와 도착지</h2>
           <button className="text-button" disabled={!locations.from && !locations.to} onClick={() => {
+            reports.cancel()
             onChange({})
             setPicking('from')
             setNotice('')
             setPointDetail(undefined)
+            setReportDetail(undefined)
             setEditing(true)
           }}>초기화</button>
         </div>
         <p className="muted">완산구 안의 두 공공장소를 지도에서 선택하세요.</p>
         {ends.map(end => {
-          const point = locations[end]
+          const location = locations[end]
           return <div className="endpoint real-endpoint" key={end}>
             <button className={editing && picking === end ? 'pick active' : 'pick'} aria-pressed={editing && picking === end}
-              onClick={() => { setPicking(end); setEditing(true); setPointDetail(undefined); setNotice('') }}>{names[end]}</button>
-            <span aria-label={names[end] + ' 좌표'}>{point ? `${point[1].toFixed(5)}, ${point[0].toFixed(5)}` : '미선택'}</span>
+              onClick={() => { reports.cancel(); setPicking(end); setEditing(true); setPointDetail(undefined); setReportDetail(undefined); setNotice('') }}>{names[end]}</button>
+            <span aria-label={names[end] + ' 장소'}>{location ? placeLabel(location.point, places ?? emptyPlaces, location.name) : '미선택'}</span>
           </div>
         })}
         <button className="text-button" onClick={showExample}>예시 지점 표시</button>
         <p className="notice" role="status">{notice}</p>
+      </section>
+      <section aria-label="시민 제보와 범죄주의구간">
+        <h2>시민 제보와 범죄주의구간</h2>
+        <div className="layer-controls community-controls">
+          <label><input type="checkbox" checked={showReports} onChange={e => {
+            setShowReports(e.target.checked)
+            if (!e.target.checked) setReportDetail(undefined)
+          }} />어두워서 피하고 싶은 곳</label>
+          <label><input type="checkbox" checked={showCrime} disabled={!reports.safemap} onChange={e => {
+            setShowCrime(e.target.checked)
+            if (e.target.checked) {
+              setShowLighting(false)
+              setPointDetail(undefined)
+            }
+          }} />공식 범죄주의구간</label>
+          {lighting && <label><input type="checkbox" checked={showLighting} onChange={e => {
+            setShowLighting(e.target.checked)
+            if (!e.target.checked) setPointDetail(undefined)
+          }} />가상 조도</label>}
+        </div>
+        <p className="muted" role="status">{reports.mode === 'shared' ? `공유 제보 ${formatCount(reports.reports.reduce((total, item) => total + item.count, 0))}건` :
+          reports.mode === 'local' ? '이 브라우저에만 저장됩니다. 공용 제보 서버 연결 전입니다.' :
+          reports.mode === 'loading' ? '제보 현황을 불러오는 중입니다.' : '공용 제보 서버에 연결하지 못했습니다.'}</p>
+        <p className="muted">{crime.status || (!reports.safemap && '공식 지도는 생활안전지도 키 연결이 필요합니다.')} <a href="https://www.safemap.go.kr/opna/data/dataViewRenew.do?objtId=205">공식 출처</a></p>
+        <button className="pick report-start" disabled={reports.mode === 'loading' || reports.mode === 'unavailable' || reports.saving}
+          aria-pressed={reports.placing} onClick={() => {
+            if (reports.placing) reports.cancel()
+            else {
+              setShowReports(true)
+              setPointDetail(undefined)
+              setReportDetail(undefined)
+              reports.start()
+              container.current?.scrollIntoView({ block: 'nearest' })
+            }
+          }}>{reports.placing ? '제보 취소' : '어두운 곳 제보하기'}</button>
+        {reports.notice && <p className="notice" role="status">{reports.notice}</p>}
       </section>
       <section>
         <h2>보행 경로</h2>
@@ -221,7 +290,7 @@ export function RealLocations({ locations, onChange }: Props) {
         {searchTerm && <p className="muted" role="status">{dataErrors.includes('장소') ? '장소 자료를 불러오지 못했습니다.' : !places ? '장소 자료를 불러오는 중입니다.' :
           matches.length ? `검색 결과 ${formatCount(matches.length)}곳` : '일치하는 장소가 없습니다.'}</p>}
         {matches.length > 0 && <div className="routes location-results" aria-label="검색 결과">{matches.map(([name, , point], index) =>
-          <button key={index} onClick={() => { select(point); focusPoint(point) }}>
+          <button key={index} onClick={() => { reports.cancel(); select(point, name); focusPoint(point) }}>
             <span>{name}</span><span>{names[picking]}</span>
           </button>)}</div>}
         {dataErrors.length > 0 && <p className="notice" role="alert">{dataErrors.join(', ')} 자료를 불러오지 못했습니다.</p>}
@@ -232,6 +301,9 @@ export function RealLocations({ locations, onChange }: Props) {
         <p className="muted">임의 가로등으로 계산한 시연 결과입니다. 빨간색은 {settings.threshold} lx 미만을 뜻합니다.</p>
         {lighting.segments.length > 0 && <button className="text-button" onClick={() => {
           const sample = lighting.segments[0].candidate
+          reports.cancel()
+          setShowLighting(true)
+          setReportDetail(undefined)
           setPointDetail(sample)
           setEditing(false)
           focusPoint(sample.point)
@@ -242,10 +314,13 @@ export function RealLocations({ locations, onChange }: Props) {
       <section className="map" aria-label="실제 위치를 선택할 카카오 지도">
         <div className="kakao-map real-map" ref={container} />
         {instance && <LocationLayer instance={instance} buildings={showBuildings ? buildings ?? emptyBuildings : emptyBuildings}
-          places={showPlaces ? places ?? emptyPlaces : emptyPlaces} lighting={lighting} selected={pointDetail} />}
+          places={showPlaces ? places ?? emptyPlaces : emptyPlaces} lighting={showLighting ? lighting : undefined}
+          selected={pointDetail} crime={crime.image} reports={showReports ? reports.reports : undefined} reportPreview={reports.pending} />}
         {instance && <>
-          <p className="map-label" role="status">{editing || !route ? `${names[picking]}로 지정할 지점을 누르세요.` :
-            lighting?.low.length || lighting?.segments.length ? '빨간 점이나 구간을 누르면 상세를 볼 수 있습니다.' : '현재 경로에서 표시할 저조도 지점이 없습니다.'}</p>
+          <p className="map-label" role="status">{reports.placing ? '어두워서 피하고 싶은 공공 보행 구간을 누르세요.' :
+            editing || !route ? `${names[picking]}로 지정할 지점을 누르세요.` :
+              !showLighting ? '보행 경로를 확인하세요.' : lighting?.low.length || lighting?.segments.length ?
+                '빨간 점이나 구간을 누르면 상세를 볼 수 있습니다.' : '현재 경로에서 표시할 저조도 지점이 없습니다.'}</p>
           <div className="zoom real-zoom" aria-label="지도 확대 및 축소">
             <button aria-label="지도 확대" onClick={() => zoomMap(-1)}>+</button>
             <button aria-label="지도 축소" onClick={() => zoomMap(1)}>−</button>
@@ -253,6 +328,18 @@ export function RealLocations({ locations, onChange }: Props) {
         </>}
         {!instance && (failed ? <p className="map-label" role="alert">카카오 지도를 불러오지 못했습니다.</p> :
           <p className="map-label" role="status">카카오 지도 불러오는 중</p>)}
+        {reports.pending && <section className="detail map-point-detail" aria-label="제보 위치 확인">
+          <div className="section-title"><h2>어두워서 피하고 싶은 곳</h2></div>
+          <p><strong>{placeLabel(reports.pending, places ?? emptyPlaces)}</strong></p>
+          <p>위치는 20 m 안팎의 격자로 표시됩니다.</p>
+          <button className="text-button" disabled={reports.saving} onClick={reports.submit}>{reports.saving ? '저장 중' : '이 위치 제보'}</button>
+          <button className="text-button" disabled={reports.saving} onClick={reports.cancel}>취소</button>
+          {reports.notice && <p className="notice" role="status">{reports.notice}</p>}
+        </section>}
+        {reportDetail && <section className="detail map-point-detail" aria-label="시민 제보 상세" aria-live="polite">
+          <div className="section-title"><h2>{placeLabel(reportDetail.point, places ?? emptyPlaces)}</h2><button className="text-button" onClick={() => setReportDetail(undefined)}>닫기</button></div>
+          <p>어두워서 피하고 싶은 곳 · 제보 {formatCount(reportDetail.count)}건</p>
+        </section>}
         {pointDetail && <section className="detail map-point-detail" aria-label="저조도 지점 상세" aria-live="polite">
           <div className="section-title"><h2>저조도 지점 상세</h2><button className="text-button" onClick={() => setPointDetail(undefined)}>닫기</button></div>
           <dl className="point-details">
@@ -263,10 +350,12 @@ export function RealLocations({ locations, onChange }: Props) {
           <p className="muted">가상 조명으로 계산한 값입니다.</p>
         </section>}
       </section>
-      {lighting && <div className="legend" aria-label="가상 조도 지도 범례">
-        <span><i className="yellow"/>임의 가로등</span><span><i className="red"/>예상 저조도</span>
-        {lighting.unknown.length > 0 && <span><i className="gray"/>경계 주변 자료 부족</span>}
-      </div>}
+      <div className="legend" aria-label="지도 범례">
+        {showReports && <span><i className="report-symbol"/>어두워서 피하고 싶은 곳</span>}
+        {crime.image && <span>범죄주의구간 · 생활안전지도</span>}
+        {showLighting && lighting && <><span><i className="yellow"/>임의 가로등</span><span><i className="red"/>예상 저조도</span>
+          {lighting.unknown.length > 0 && <span><i className="gray"/>경계 주변 자료 부족</span>}</>}
+      </div>
       {route && <dl className="stats real-stats" aria-label="보행 경로 거리 요약">
         <div><dt>전체 보행 거리</dt><dd>{meters(route.meters)}</dd></div>
         <div><dt>저조도 예상 거리</dt><dd className="low">{lighting ? meters(lighting.lowMeters) : '자료 없음'}</dd></div>
