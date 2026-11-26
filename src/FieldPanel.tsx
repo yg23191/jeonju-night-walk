@@ -3,6 +3,7 @@ import type { ChangeEvent, FormEvent } from 'react'
 import { fieldCsv, readFieldCsv } from './fieldMeasurements.ts'
 import type { FieldSite } from './fieldMeasurements.ts'
 import type { Point } from './gis.ts'
+import { inWansan } from './wansan.ts'
 import type { useFieldMeasurements } from './useFieldMeasurements.ts'
 
 export const fieldLabels: Record<FieldSite['status'], string> = {
@@ -32,6 +33,8 @@ interface Props {
   pending?: { point: Point; label: string; site?: FieldSite }
   onStart: () => void
   onCancel: () => void
+  mapReady: boolean
+  onCoordinates: (point: Point) => void
   onLocate?: () => void
   locating: boolean
   onSaved: (id: string) => void
@@ -39,11 +42,28 @@ interface Props {
   titleFor: (site: FieldSite) => string
 }
 
-export function FieldPanel({ field, active, visible, onVisible, pending, onStart, onCancel, onLocate, locating, onSaved, onSite, titleFor }: Props) {
+export function FieldPanel({ field, active, visible, onVisible, pending, onStart, onCancel, mapReady, onCoordinates,
+  onLocate, locating, onSaved, onSite, titleFor }: Props) {
   const [message, setMessage] = useState('')
   const [confirmRemove, setConfirmRemove] = useState('')
   const previousDirection = pending?.site?.direction || sensorDirections[0]
   const directions = sensorDirections.includes(previousDirection) ? sensorDirections : [...sensorDirections, previousDirection]
+
+  function chooseCoordinates(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const form = event.currentTarget
+    const data = new FormData(form)
+    const point: Point = [Number(data.get('longitude')), Number(data.get('latitude'))]
+    if (!inWansan(point)) {
+      setMessage('완산구 안의 경도와 위도를 입력해 주세요.')
+      return
+    }
+    onCoordinates(point)
+    form.reset()
+    const details = form.closest('details')
+    if (details) details.open = false
+    setMessage('지점을 지정했습니다. 아래에 조도 측정값을 입력해 주세요.')
+  }
 
   function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -91,9 +111,17 @@ export function FieldPanel({ field, active, visible, onVisible, pending, onStart
       <label><input type="checkbox" checked={visible} onChange={event => onVisible(event.target.checked)} />실측 지점 표시</label>
     </div>
     <div className="layer-controls">
-      <button className="pick" onClick={() => { setMessage(''); if (active) onCancel(); else onStart() }}>{active ? '실측 선택 취소' : '실측 지점 찍기'}</button>
+      <button className="pick" disabled={!mapReady && !active} onClick={() => { setMessage(''); if (active) onCancel(); else onStart() }}>{active ? '실측 선택 취소' : '실측 지점 찍기'}</button>
       <button className="pick" disabled={!onLocate || locating || Boolean(pending)} onClick={() => { setMessage(''); onLocate?.() }}>현재 위치 주변에서 찍기</button>
     </div>
+    {!pending && <details className="field-options">
+      <summary>좌표로 실측 지점 지정</summary>
+      <form className="field-form" onSubmit={chooseCoordinates}>
+        <label>경도<input type="number" name="longitude" inputMode="decimal" step="any" min="-180" max="180" required /></label>
+        <label>위도<input type="number" name="latitude" inputMode="decimal" step="any" min="-90" max="90" required /></label>
+        <button className="pick" type="submit">이 좌표에서 측정</button>
+      </form>
+    </details>}
     {pending && <form className="field-form" key={pending.site?.id ?? pending.point.join(',')} onSubmit={save}>
       <strong>{pending.label}</strong>
       <label>지점 ID<input required name="id" maxLength={64} readOnly={Boolean(pending.site)}

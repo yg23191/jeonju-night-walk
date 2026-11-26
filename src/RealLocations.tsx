@@ -298,7 +298,7 @@ export function RealLocations({ locations, onChange }: Props) {
     setFieldLocationNotice('')
   }
 
-  function startField() {
+  function startField(scrollToMap = true) {
     cancelField()
     reports.cancel()
     setPointDetail(undefined)
@@ -306,7 +306,7 @@ export function RealLocations({ locations, onChange }: Props) {
     setNotice('')
     setShowField(true)
     setFieldPicking(true)
-    container.current?.scrollIntoView({ block: 'nearest' })
+    if (scrollToMap) container.current?.scrollIntoView({ block: 'nearest' })
   }
 
   function locateField() {
@@ -368,7 +368,12 @@ export function RealLocations({ locations, onChange }: Props) {
       <div ref={fieldSection}>
         <FieldPanel field={field} active={fieldPicking} visible={showField} onVisible={setShowField}
           pending={fieldPending && { ...fieldPending, label: placeLabel(fieldPending.point, places ?? emptyPlaces, fieldPending.site?.siteName) }}
-          onStart={startField} onCancel={cancelField} onLocate={instance ? locateField : undefined} locating={locatingField}
+          onStart={startField} onCancel={cancelField} mapReady={Boolean(instance)}
+          onCoordinates={point => {
+            startField(false)
+            setFieldPending({ point })
+            focusPoint(point)
+          }} onLocate={instance ? locateField : undefined} locating={locatingField}
           onSaved={id => { cancelField(); setFieldSelected(id); setShowField(true) }}
           onSite={site => {
             reports.cancel()
