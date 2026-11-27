@@ -75,6 +75,9 @@ export function RealLocations({ locations, onChange }: Props) {
   const [query, setQuery] = useState('')
   const reports = useDarkReports()
   const field = useFieldMeasurements()
+  const officialLampLabel = reports.lampSources.length === 2 ? '전주시 가로등·보안등' :
+    reports.lampSources.includes('security') ? '전주시 보안등' :
+    reports.lampSources.includes('street') ? '전주시 가로등' : '전주시 조명 자료'
   const fieldDetail = showField ? field.sites.find(site => site.id === fieldSelected) : undefined
   const activeLamps = useMemo(() => [
     ...(showPublicLamps ? publicLamps ?? [] : []),
@@ -406,7 +409,7 @@ export function RealLocations({ locations, onChange }: Props) {
               setShowOfficialLamps(e.target.checked)
               if (e.target.checked && officialLamps?.some(source => source.error)) setOfficialLamps(undefined)
               setLampError(false)
-            }} />전주시 가로등·보안등</label>
+            }} />{officialLampLabel}</label>
           {lighting && <label><input type="checkbox" checked={showLighting} onChange={e => {
             setShowLighting(e.target.checked)
             if (!e.target.checked) setPointDetail(undefined)
@@ -537,7 +540,7 @@ export function RealLocations({ locations, onChange }: Props) {
         {showField && field.sites.length > 0 && <><span><i className="field-symbol"/>실측 저조도 확인</span>
           <span><i className="field-symbol above"/>실측 기준 이상</span><span><i className="field-symbol review"/>실측 검토 중</span></>}
         {showPublicLamps && <span><i className="registered-lamp-symbol"/>공개 등록 가로등 · OSM</span>}
-        {showOfficialLamps && <span><i className="registered-lamp-symbol"/>전주시 가로등·보안등</span>}
+        {showOfficialLamps && <span><i className="registered-lamp-symbol"/>{officialLampLabel}</span>}
         {crime.image && <span>범죄주의구간 · 생활안전지도</span>}
         {showLighting && lighting && <><span><i className="yellow"/>임의 가로등</span><span><i className="red"/>예상 저조도</span>
           {lighting.unknown.length > 0 && <span><i className="gray"/>경계 주변 자료 부족</span>}</>}
