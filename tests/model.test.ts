@@ -10,7 +10,17 @@ import { findWalkingPath } from '../src/walkingNetwork.ts'
 import { simulateRouteLighting } from '../src/routeLighting.ts'
 import { placeLabel } from '../src/locationData.ts'
 import { reportCell, reportCellKey } from '../src/reportLocations.ts'
-import { defaultFieldRules, fieldCsv, mergeFieldReadings, readFieldCsv, summarizeFieldReadings } from '../src/fieldMeasurements.ts'
+import { defaultFieldRules, fieldCsv, mergeFieldReadings, readFieldCsv, readFieldCsvBytes, summarizeFieldReadings } from '../src/fieldMeasurements.ts'
+
+test('field CSV imports Korean site names in UTF-8 and Windows Korean encoding', () => {
+  const prefix = 'id,longitude,latitude,lux,measured_at,site_name\r\nWS-01,127.1468,35.8244,3,2026-11-26T20:00:00+09:00,'
+  const encoder = new TextEncoder()
+  const utf8 = encoder.encode(`\uFEFF${prefix}전주`)
+  const koreanBytes = Uint8Array.from([...encoder.encode(prefix), 0xc0, 0xfc, 0xc1, 0xd6])
+  assert.equal(readFieldCsvBytes(utf8.buffer)[0].siteName, '전주')
+  assert.deepEqual(readFieldCsvBytes(koreanBytes.buffer), readFieldCsvBytes(utf8.buffer))
+  assert.throws(() => readFieldCsvBytes(Uint8Array.of(0xff).buffer), /CSV UTF-8/)
+})
 
 test('field readings use the median of the latest comparable repeats and round-trip through CSV', () => {
   const csv = `id,longitude,latitude,lux,measured_at,height_m,direction,repeat_no

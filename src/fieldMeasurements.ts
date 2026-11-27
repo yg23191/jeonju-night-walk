@@ -88,6 +88,20 @@ export function validateFieldReading(reading: FieldReading) {
     direction: reading.direction.trim(), measuredAt: new Date(time).toISOString() }
 }
 
+export function readFieldCsvBytes(bytes: ArrayBuffer): FieldReading[] {
+  let text: string
+  try {
+    text = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+  } catch {
+    try {
+      text = new TextDecoder('euc-kr', { fatal: true }).decode(bytes)
+    } catch {
+      throw new Error('한글 인코딩을 읽을 수 없습니다. CSV UTF-8 형식으로 다시 저장해 주세요.')
+    }
+  }
+  return readFieldCsv(text)
+}
+
 export function readFieldCsv(text: string): FieldReading[] {
   const [header, ...rows] = csvRows(text.replace(/^\uFEFF/, ''))
   const required = ['id', 'longitude', 'latitude', 'lux', 'measured_at']

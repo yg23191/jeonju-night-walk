@@ -32,6 +32,8 @@
 
 ## CSV 양식
 
+엑셀에서 작성할 때는 **CSV UTF-8** 형식으로 저장합니다. 기존 Windows 한글 CSV(CP949)도 가져올 수 있습니다.
+
 ```csv
 id,longitude,latitude,lux,measured_at,height_m,direction,repeat_no,site_name
 ```

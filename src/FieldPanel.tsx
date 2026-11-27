@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { ChangeEvent, FormEvent } from 'react'
-import { fieldCsv, readFieldCsv } from './fieldMeasurements.ts'
+import { fieldCsv, readFieldCsvBytes } from './fieldMeasurements.ts'
 import type { FieldSite } from './fieldMeasurements.ts'
 import type { Point } from './gis.ts'
 import { inWansan } from './wansan.ts'
@@ -95,7 +95,7 @@ export function FieldPanel({ field, active, visible, onVisible, pending, onStart
     if (!file) return
     try {
       if (file.size > 2_000_000) throw new Error('CSV를 2 MB 이하로 나눠서 가져오세요.')
-      const imported = readFieldCsv(await file.text())
+      const imported = readFieldCsvBytes(await file.arrayBuffer())
       field.store(imported)
       onVisible(true)
       setMessage(`CSV 측정값 ${imported.length}행을 가져왔습니다.`)
